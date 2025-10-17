@@ -1,0 +1,69 @@
+/* Sidebar link hover styling */
+.sidebar-link {
+  color: #ffffff !important;
+  display: block;
+  padding: 12px 16px;
+  border-radius: 8px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.sidebar-link:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff !important;
+}
+
+.sidebar-link.active,
+.sidebar-link.active:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff !important;
+}
+
+/* Light pink theme helpers */
+.pink-section {
+  background-color: #f8b6c1;
+  color: #ffffff;
+}
+
+.pink-section h1,
+.pink-section h2,
+.pink-section h3,
+.pink-section h4,
+.pink-section h5,
+.pink-section h6,
+.pink-section p,
+.pink-section label {
+  color: #ffffff;
+}
+
+.pink-section .btn-pink {
+  background-color: #f06a98;
+  color: #ffffff;
+  border: none;
+}
+
+.btn-pink {
+  background-color: #f06a98;
+  color: #ffffff;
+  border: none;
+}
+
+.btn {
+  transition: filter 0.15s ease, background-color 0.15s ease;
+}
+.btn:hover {
+  filter: none;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.btn-pink:hover {
+  filter: none;
+  box-shadow: 0 2px 8px rgba(240, 106, 152, 0.35);
+  transform: translateY(-1px);
+}
+
+.pink-table {
+  border: 2px solid #f8b6c1;
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

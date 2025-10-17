@@ -1,0 +1,41 @@
+{
+  "name": "employee-backend",
+  "version": "1.0.0",
+  "description": "Backend for Employee Management",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^5.1.0",
+    "express-rate-limit": "^6.7.0",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.0.0",
+    "jsonwebtoken": "^9.0.0",
+    "moment-timezone": "^0.6.0",
+    "mongoose": "^8.14.2",
+    "morgan": "^1.10.0",
+    "node-cache": "^5.1.2",
+    "node-cron": "^4.2.1",
+    "node-fetch": "^3.3.2",
+    "nodemailer": "^7.0.9",
+    "pdfkit": "^0.17.2",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "axios": "^1.12.2",
+    "chalk": "^5.6.2",
+    "nodemon": "^3.1.10"
+  }
+}

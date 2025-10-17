@@ -1,0 +1,21 @@
+[
+  {
+    "firstName": "Juan",
+    "lastName": "Dela Cruz",
+    "email": "juan.delacruz@test.com",
+    "contactNumber": "09123456789",
+    "employeeId": "EMP-TEST-001",
+    "status": "regular",
+    "position": "Software Developer",
+    "hireDate": "2024-01-01T00:00:00.000Z",
+    "salary": 25000,
+    "username": "juandelacruz",
+    "password": "Password123",
+    "isActive": true,
+    "fingerprintEnrolled": true,
+    "fingerprintTemplate": "ENROLLED",
+    "fingerprintStatus": "registered",
+    "fingerprintEnrolledAt": "2025-10-12T11:14:58.098Z",
+    "_id": "1760267698098"
+  }
+]

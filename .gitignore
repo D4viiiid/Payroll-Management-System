@@ -1,0 +1,31 @@
+# Node
+node_modules/
+**/node_modules/
+npm-debug.log
+package-lock.json
+
+# Python
+__pycache__/
+.venv/
+env/
+venv/
+*.pyc
+
+# OS / Editor
+.DS_Store
+.vscode/
+Thumbs.db
+
+# Database
+*.db
+fingerprint_database.db
+
+# Environment
+.env
+
+# Logs
+debug.log
+
+# Build
+dist/
+build/

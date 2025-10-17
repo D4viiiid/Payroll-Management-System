@@ -1,0 +1,90 @@
+// === REAL FINGERPRINT ENROLLMENT ===
+const handleFingerprintEnrollment = async () => {
+  setIsEnrollingFingerprint(true);
+  setFingerprintStep(0);
+  
+  try {
+    console.log('🔍 Testing biometric device connection...');
+    
+    // Test device connection first
+    const healthCheck = await fetch('/api/biometric-integrated/device/health');
+    
+    if (!healthCheck.ok) {
+      throw new Error('Biometric device not connected');
+    }
+    
+    const healthData = await healthCheck.json();
+    console.log('✅ Device status:', healthData);
+    
+    if (!healthData.success || !healthData.connected) {
+      throw new Error('Biometric device not available');
+    }
+
+    // Show scanning message
+    setFingerprintStep(1); // Scanning
+    alert('📱 Device ready! Please place your finger on the scanner and scan 3 times...');
+    
+    console.log('🖐️ Starting fingerprint capture...');
+    
+    // Call pre-enroll endpoint to capture fingerprint BEFORE creating employee
+    const enrollResponse = await fetch('/api/biometric-integrated/pre-enroll', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!enrollResponse.ok) {
+      const errorData = await enrollResponse.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Fingerprint capture failed');
+    }
+
+    const enrollResult = await enrollResponse.json();
+    
+    if (!enrollResult.success || !enrollResult.template) {
+      throw new Error(enrollResult.message || 'Failed to capture fingerprint template');
+    }
+
+    console.log('✅ Fingerprint captured! Template length:', enrollResult.templateLength);
+    
+    // Store the captured template in state
+    setCapturedFingerprintTemplate(enrollResult.template);
+
+    // Generate employee credentials AFTER successful fingerprint capture
+    console.log('🔑 Generating employee credentials...');
+    const generatedEmployeeId = generateEmployeeId();
+    const generatedPassword = generatePassword();
+    
+    // Update form data with generated credentials and mark for fingerprint enrollment
+    setFormData(prev => ({
+      ...prev,
+      employeeId: generatedEmployeeId,
+      username: generatedEmployeeId,
+      password: generatedPassword,
+      fingerprintEnrolled: true // Mark that fingerprint is enrolled
+    }));
+    
+    setFingerprintStep(2); // Success - credentials generated
+    alert('✅ Fingerprint captured successfully! Now fill in employee details and click "Add Employee".');
+    
+    // Auto-hide success message
+    setTimeout(() => {
+      setFingerprintStep(0);
+      setIsEnrollingFingerprint(false);
+    }, 3000);
+    
+  } catch (error) {
+    console.error('❌ Fingerprint enrollment error:', error);
+    
+    let userMessage = error.message;
+    
+    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+      userMessage = 'Cannot connect to fingerprint service. Please make sure the biometric device is connected and the backend server is running.';
+    }
+    
+    alert('❌ Fingerprint Enrollment Failed:\n' + userMessage);
+    setFingerprintStep(0);
+    setIsEnrollingFingerprint(false);
+    setCapturedFingerprintTemplate(null); // Clear any partial data
+  }
+};

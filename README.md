@@ -31,3 +31,19 @@ Notes
 
 License & Contribution
 - Add a license and contribution guidelines as appropriate.
+
+Recreating the Python virtual environment (recommended)
+
+If you need to run Python parts of the project, we intentionally do not track the `.venv/` directory. Instead recreate a clean venv and install pinned dependencies from `requirements.txt`:
+
+```powershell
+# create venv (Windows PowerShell)
+python -m venv .venv
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Why `.venv` is excluded
+- Committing `site-packages` inflates the repository and often contains platform-specific binaries; excluding the venv keeps the repo small and portable. Use `requirements.txt` to reproduce the environment.

@@ -117,50 +117,27 @@ app.use((req, res, next) => {
   next();
 });
 
+// 🚀 SERVERLESS FIX: Import serverless-optimized DB connection
+import connectDB from './utils/dbConnect.js';
+// 🚀 DB Connection Middleware
+import { ensureDBConnection } from './middleware/dbMiddleware.js';
+
 // MongoDB Connection
-console.log('Attempting to connect to MongoDB...');
+console.log('📗 Serverless MongoDB connection ready (will connect on first request)');
 let mongoConnected = false;
 
-// ✅ CRITICAL PERFORMANCE FIX: Add connection pooling and optimization settings
-const mongooseOptions = {
-  maxPoolSize: 50, // Maximum number of connections in the pool (default: 100, reduced to 50 for efficiency)
-  minPoolSize: 10, // Minimum number of connections to keep open (ensures connections ready)
-  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-  serverSelectionTimeoutMS: 10000, // Timeout for server selection (10 seconds)
-  family: 4, // Use IPv4, skip trying IPv6 (faster connection)
-  maxIdleTimeMS: 30000, // Remove idle connections after 30 seconds
-  connectTimeoutMS: 10000, // Timeout for initial connection (10 seconds)
-  retryWrites: true, // Retry failed write operations
-  w: 'majority', // Write concern for data durability
-  // ✅ Performance optimization: Use secondary reads for non-critical data
-  // This reduces load on primary and improves read performance
-  readPreference: 'primaryPreferred', // Use primary, fall back to secondary if primary unavailable
-};
-
-// ✅ CRITICAL: Set Mongoose strictQuery to false to prevent deprecation warnings
-mongoose.set('strictQuery', false);
-
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/employee_db', mongooseOptions)
-  .then(() => {
-    console.log('MongoDB Connected Successfully');
-    mongoConnected = true;
-    
-    // Initialize scheduled tasks after MongoDB connection
-    console.log('🤖 Initializing scheduled tasks...');
-    scheduleAutoCloseShifts(); // Auto-close shifts after 12 hours
-    scheduleEndOfDayShiftClose(); // Close remaining shifts at end of day
-    console.log('✅ Scheduled tasks initialized');
-  })
-  .catch(err => {
-    console.error('MongoDB Connection Error:', err.message);
-    console.log('⚠️  Falling back to local storage for biometric operations');
-    mongoConnected = false;
-  });
+// ✅ For serverless (Vercel), we connect on-demand per request, not at startup
+// Connection will be cached and reused across function invocations
+// This prevents "buffering timed out" errors and 500 responses
 
 // Export for use in routes
 export { mongoConnected };
 
 console.log('Loading routes...');
+
+// ✅ CRITICAL SERVERLESS FIX: Add DB connection middleware to ALL API routes
+// This ensures MongoDB connection is established before processing any request
+app.use('/api', ensureDBConnection);
 
 // ✅ Routes (after express.json)
 app.use("/api/biometric", biometricRoutes);

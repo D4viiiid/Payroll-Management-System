@@ -149,23 +149,12 @@ const Login = () => {
     setError("");
 
     try {
-      // Verify PIN with backend
-      const response = await fetch('http://localhost:5000/api/employees/admin/verify-pin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          employeeId: pendingAdminData.employeeId,
-          pin: pin
-        })
-      });
+      // Verify PIN with backend using apiService
+      const result = await employeeApi.verifyPin(pendingAdminData.employeeId, pin);
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        setError(result.message || 'Invalid PIN');
-        toast.error(result.message || 'Invalid PIN');
+      if (result.error || !result.success) {
+        setError(result.message || result.error || 'Invalid PIN');
+        toast.error(result.message || result.error || 'Invalid PIN');
         setPinLoading(false);
         
         // Reset PIN input after failed attempt

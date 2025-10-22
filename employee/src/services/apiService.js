@@ -220,6 +220,15 @@ export const employeeApi = {
     });
   },
 
+  // Verify admin PIN
+  verifyPin: async (employeeId, pin) => {
+    return await fetchApi(`${BACKEND_API_URL}/employees/admin/verify-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeeId, pin })
+    });
+  },
+
   // Change password
   changePassword: async (id, passwordData) => {
     return await fetchApi(`${BACKEND_API_URL}/employees/${id}/change-password`, {

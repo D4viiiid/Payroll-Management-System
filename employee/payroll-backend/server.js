@@ -68,8 +68,20 @@ const app = express();
 // 🚀 PERFORMANCE: Initialize cache (TTL: 5 minutes by default)
 export const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
+// ✅ CORS Configuration with environment variable
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+console.log('🔒 CORS Configuration:');
+console.log('   Allowed Origin:', corsOptions.origin);
+
 // ✅ Middleware (must come first)
-app.use(cors());
+app.use(cors(corsOptions));
 // 🚀 PERFORMANCE: Enable gzip/brotli compression (but skip small responses)
 app.use(compression({
   filter: (req, res) => {
@@ -246,5 +258,11 @@ app.use(errorHandler);
 
 // WebSocket functionality removed - not needed
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+// Export app for Vercel serverless functions
+export default app;
+
+// Only start server if not in Vercel serverless environment
+if (process.env.VERCEL !== '1') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+}

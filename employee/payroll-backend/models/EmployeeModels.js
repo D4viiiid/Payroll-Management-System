@@ -163,15 +163,30 @@ employeeSchema.index({ createdAt: -1 }); // Sort by creation date
 employeeSchema.index({ username: 1, isActive: 1 }); // Login query compound index
 employeeSchema.index({ employeeId: 1, isActive: 1 }); // Alternative login query compound index
 
-// 🔐 Hash password before saving
+// 🔐 Hash password and adminPin before saving
 // ✅ CRITICAL PERFORMANCE FIX: Reduce bcrypt rounds from 12 to 10
 // 10 rounds = ~150ms per hash (good security/performance balance)
 // 12 rounds = ~600ms per hash (too slow for login)
 employeeSchema.pre('save', async function (next) {
-  if (!this.isModified('password') || !this.password) return next();
   try {
-    const hashedPassword = await bcrypt.hash(this.password, 10); // ✅ Changed from 12 to 10
-    this.password = hashedPassword;
+    // Hash password if modified
+    if (this.isModified('password') && this.password) {
+      // Check if password is already hashed (bcrypt format)
+      if (!this.password.startsWith('$2a$') && !this.password.startsWith('$2b$')) {
+        const hashedPassword = await bcrypt.hash(this.password, 10); // ✅ Changed from 12 to 10
+        this.password = hashedPassword;
+      }
+    }
+    
+    // Hash adminPin if modified
+    if (this.isModified('adminPin') && this.adminPin) {
+      // Check if PIN is already hashed (bcrypt format)
+      if (!this.adminPin.startsWith('$2a$') && !this.adminPin.startsWith('$2b$')) {
+        const hashedPin = await bcrypt.hash(this.adminPin, 10);
+        this.adminPin = hashedPin;
+      }
+    }
+    
     next();
   } catch (error) {
     next(error);

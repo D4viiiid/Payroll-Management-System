@@ -1,6 +1,7 @@
 import express from "express";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import path from "path";
+import fs from 'fs';
 import Employee from "../models/EmployeeModels.js";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -10,7 +11,7 @@ const __dirname = dirname(__filename);
 
 const router = express.Router();
 
-// Use virtual environment Python path
+// Use virtual environment Python path (Windows default inside repo)
 const VENV_PYTHON = path.resolve(
   process.cwd(),
   "..",
@@ -19,9 +20,40 @@ const VENV_PYTHON = path.resolve(
   "Scripts",
   "python.exe"
 );
-const PYTHON_PATH = process.env.PYTHON_PATH || VENV_PYTHON;
 
-console.log('🐍 Using Python interpreter:', PYTHON_PATH);
+// Determine a runnable Python command. Prefer explicit env path, repo venv, then try 'py' and 'python'.
+function testCmd(cmd, args = ['-c', 'print(1)']) {
+  try {
+    const r = spawnSync(cmd, args, { encoding: 'utf8', timeout: 3000 });
+    return r && r.status === 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+let PYTHON_PATH = null;
+if (process.env.PYTHON_PATH && fs.existsSync(process.env.PYTHON_PATH)) {
+  PYTHON_PATH = process.env.PYTHON_PATH;
+}
+
+if (!PYTHON_PATH && fs.existsSync(VENV_PYTHON)) {
+  PYTHON_PATH = VENV_PYTHON;
+}
+
+if (!PYTHON_PATH && testCmd('py', ['-3', '-c', 'print(1)'])) {
+  PYTHON_PATH = 'py';
+}
+
+if (!PYTHON_PATH && testCmd('python', ['-c', 'print(1)'])) {
+  PYTHON_PATH = 'python';
+}
+
+if (!PYTHON_PATH) {
+  console.warn('🐍 No python interpreter detected; falling back to "python". Please ensure Python 3.10+ is installed or set PYTHON_PATH env.');
+  PYTHON_PATH = 'python';
+}
+
+console.log('🐍 Using Python command:', PYTHON_PATH);
 
 /* ------------------------------------------------------
    🔍 Check biometric device health
@@ -41,7 +73,7 @@ router.get("/device/health", async (req, res) => {
     const testProcess = spawn(PYTHON_PATH, [pythonScript, "--health"], {
       stdio: "pipe",
       timeout: 15000, // Increased to 15 seconds for device initialization
-      shell: true, // Use shell to ensure proper environment
+      shell: false, // Run directly to avoid shell parsing issues
     });
 
     let stdout = "";
@@ -162,13 +194,14 @@ router.post("/pre-enroll", async (req, res) => {
     console.log(`📄 Python script: ${pythonScript}`);
     console.log("🐍 Using Python:", PYTHON_PATH);
 
+    // Always use shell:false - Node.js spawn handles spaces in executable paths correctly
     const captureProcess = spawn(
       PYTHON_PATH,
       [pythonScript, "--capture", "temp", "Pre", "Enrollment"],
       {
         stdio: "pipe",
         timeout: 90000, // 90 seconds total (30 sec per scan x 3)
-        shell: true, // Use shell to ensure proper environment
+        shell: false, // shell:false avoids quoting issues; Node handles spaces in paths
         env: {
           ...process.env,
           MONGODB_URI:
@@ -305,6 +338,7 @@ router.post("/enroll/:employeeId", async (req, res) => {
     console.log(`📄 Python script: ${pythonScript}`);
     console.log("🐍 Using Python:", PYTHON_PATH);
 
+    // Always use shell:false - Node.js spawn handles spaces in executable paths correctly
     const captureProcess = spawn(
       PYTHON_PATH,
       [
@@ -317,7 +351,7 @@ router.post("/enroll/:employeeId", async (req, res) => {
       {
         stdio: "pipe",
         timeout: 30000,
-        shell: true, // Use shell to ensure proper environment
+        shell: false, // shell:false avoids quoting issues; Node handles spaces in paths
         env: {
           ...process.env,
           MONGODB_URI:
@@ -569,10 +603,11 @@ router.post("/attendance/record", async (req, res) => {
     console.log("📍 Recording attendance with script:", pythonScript);
     console.log("🐍 Using Python:", PYTHON_PATH);
 
+    // Always use shell:false - Node.js spawn handles spaces in executable paths correctly
     const attendanceProcess = spawn(PYTHON_PATH, [pythonScript, "--direct"], {
       stdio: "pipe",
       timeout: 30000,
-      shell: true, // Use shell to ensure proper environment
+      shell: false, // shell:false avoids quoting issues; Node handles spaces in paths
       env: {
         ...process.env,
         // Use the same MongoDB URI as the backend server
@@ -628,6 +663,17 @@ router.post("/attendance/record", async (req, res) => {
         // Check result regardless of exit code (Python may exit with code 1 for expected failures)
         if (result.success) {
           console.log("✅ Attendance recorded successfully");
+          
+          // ✅ FIX ISSUE #1: Emit event for real-time dashboard updates
+          // Broadcast attendance event to all connected clients via SSE or WebSocket
+          if (global.eventEmitter) {
+            global.eventEmitter.emit('attendance-recorded', {
+              attendance: result.attendance,
+              employee: result.employee,
+              action: result.action
+            });
+          }
+          
           res.json({
             success: true,
             message: result.message || "Attendance recorded successfully",

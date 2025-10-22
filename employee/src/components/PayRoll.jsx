@@ -4,8 +4,10 @@ import { useDebounce } from "../utils/debounce";
 import { logger } from "../utils/logger";
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
+import './Admin.responsive.css';
 
 import { getAllPayrolls, createPayroll, updatePayroll, deletePayroll } from "../services/payrollService";
+import { getCurrentSalaryRate } from "../services/salaryRateService";
 
 const Payroll = () => {
   const navigate = useNavigate();
@@ -20,6 +22,8 @@ const Payroll = () => {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
+  const [showImportantNotice, setShowImportantNotice] = useState(false); // ✅ NEW: Toggle for Important Notice dropdown
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // FILTER STATES - KATULAD NG SA ATTENDANCE
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,6 +33,16 @@ const Payroll = () => {
   const [selectedYear, setSelectedYear] = useState('');
   const [availableYears, setAvailableYears] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
+  
+  // ✅ FIX ISSUE #3: Sorting state
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
+  // 💰 Dynamic Salary Rate (fetched from backend)
+  const [salaryRate, setSalaryRate] = useState({ 
+    dailyRate: 550, 
+    hourlyRate: 68.75, 
+    overtimeRate: 85.94 
+  });
 
   const [formData, setFormData] = useState({
     employeeName: "",
@@ -199,6 +213,15 @@ const Payroll = () => {
     if (!employee) return 0;
 
     try {
+      // ✅ FIX: Fetch current salary rate from database (not employee.dailyRate which doesn't exist)
+      const rateResponse = await fetch('/api/salary-rate/current');
+      let currentRate = salaryRate; // Fallback to component state
+      
+      if (rateResponse.ok) {
+        const rateData = await rateResponse.json();
+        currentRate = rateData.data || rateData;
+      }
+      
       // Get current week range (Monday - Saturday)
       const today = new Date();
       const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
@@ -219,7 +242,7 @@ const Payroll = () => {
       
       if (!response.ok) {
         // If fetch fails, calculate based on daily rate and days in week
-        const dailyRate = employee.dailyRate || 550;
+        const dailyRate = currentRate.dailyRate;
         const daysWorked = dayOfWeek === 0 ? 6 : Math.min(dayOfWeek, 6); // If Sunday, 6 days; else current day (max 6)
         return dailyRate * daysWorked;
       }
@@ -234,16 +257,16 @@ const Payroll = () => {
       if (!Array.isArray(attendanceRecords)) {
         logger.error('❌ Attendance records is not an array:', attendanceRecords);
         // Fallback to daily rate calculation
-        const dailyRate = employee.dailyRate || 550;
+        const dailyRate = currentRate.dailyRate;
         const daysWorked = dayOfWeek === 0 ? 6 : Math.min(dayOfWeek, 6);
         return dailyRate * daysWorked;
       }
       
-      // Calculate total salary from attendance
+      // Calculate total salary from attendance using current database rates
       let totalSalary = 0;
-      const dailyRate = employee.dailyRate || 550;
-      const hourlyRate = employee.hourlyRate || 68.75;
-      const overtimeRate = employee.overtimeRate || 85.94;
+      const dailyRate = currentRate.dailyRate;
+      const hourlyRate = currentRate.hourlyRate;
+      const overtimeRate = currentRate.overtimeRate;
 
       attendanceRecords.forEach(record => {
         // Skip Sunday records
@@ -264,8 +287,8 @@ const Payroll = () => {
       return Math.round(totalSalary * 100) / 100; // Round to 2 decimal places
     } catch (error) {
       logger.error('Error calculating employee salary:', error);
-      // Fallback: estimate based on daily rate
-      const dailyRate = employee.dailyRate || 550;
+      // Fallback: estimate based on daily rate from component state
+      const dailyRate = salaryRate.dailyRate;
       const today = new Date();
       const dayOfWeek = today.getDay();
       const daysWorked = dayOfWeek === 0 ? 6 : Math.min(dayOfWeek, 6);
@@ -350,6 +373,18 @@ const Payroll = () => {
       return '';
     }
   };
+
+  // 💰 Fetch current salary rate on component mount
+  useEffect(() => {
+    getCurrentSalaryRate()
+      .then(rate => {
+        setSalaryRate(rate);
+        logger.info('✅ Loaded current salary rate:', rate);
+      })
+      .catch(error => {
+        logger.error('❌ Failed to load salary rate, using defaults:', error);
+      });
+  }, []);
 
   // Reset date inputs when filter type changes
   useEffect(() => {
@@ -739,6 +774,89 @@ const Payroll = () => {
     alert('Data refreshed successfully!');
   };
 
+  // ✅ FIX ISSUE #3: Handle table column sorting
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  // ✅ FIX ISSUE #3: Get sorted data
+  const getSortedData = (data) => {
+    if (!sortConfig.key) return data;
+
+    const sortedData = [...data].sort((a, b) => {
+      // Find employee data for both records
+      const empA = employees.find(emp => 
+        emp.employeeId === a.employeeId || 
+        `${emp.firstName} ${emp.lastName}` === a.employeeName
+      );
+      const empB = employees.find(emp => 
+        emp.employeeId === b.employeeId || 
+        `${emp.firstName} ${emp.lastName}` === b.employeeName
+      );
+
+      let aValue, bValue;
+
+      switch (sortConfig.key) {
+        case 'employeeId':
+          aValue = a.employeeId || '';
+          bValue = b.employeeId || '';
+          break;
+        case 'employeeName':
+          aValue = a.employeeName || '';
+          bValue = b.employeeName || '';
+          break;
+        case 'status':
+          // Order: regular > oncall > unknown
+          const statusOrder = { 'regular': 1, 'oncall': 2, 'on-call': 2 };
+          aValue = statusOrder[empA?.status?.toLowerCase()] || 999;
+          bValue = statusOrder[empB?.status?.toLowerCase()] || 999;
+          break;
+        case 'salary':
+          aValue = parseFloat(a.salary) || 0;
+          bValue = parseFloat(b.salary) || 0;
+          break;
+        case 'deductions':
+          aValue = parseFloat(a.deductions) || 0;
+          bValue = parseFloat(b.deductions) || 0;
+          break;
+        case 'netSalary':
+          aValue = parseFloat(a.netSalary) || 0;
+          bValue = parseFloat(b.netSalary) || 0;
+          break;
+        case 'date':
+          aValue = new Date(a.date || a.createdAt);
+          bValue = new Date(b.date || b.createdAt);
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+
+    return sortedData;
+  };
+
+  // ✅ FIX ISSUE #3: Get sort icon for column header
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) {
+      return <i className="fas fa-sort text-gray-400 ms-2"></i>;
+    }
+    return sortConfig.direction === 'asc' 
+      ? <i className="fas fa-sort-up text-blue-600 ms-2"></i>
+      : <i className="fas fa-sort-down text-blue-600 ms-2"></i>;
+  };
+
   // FIXED useEffect
   useEffect(() => {
     const fetchPayrolls = async () => {
@@ -814,14 +932,32 @@ const Payroll = () => {
   }, [formData.salary, formData.deductions]);
 
   return (
-    <div className="d-flex" style={{ minHeight: '100vh', background: '#f8f9fb' }}>
-      <AdminSidebar />
-      
-      {/* Main Content - WITH MARGIN FOR FIXED SIDEBAR */}
-      <div className="flex-1 overflow-auto" style={{ marginLeft: 280 }}>
+    <div className="admin-page-wrapper">
+      {/* Mobile Hamburger Menu */}
+      <button
+        className="hamburger-menu-button"
+        onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+        aria-label="Toggle Menu"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      {/* Mobile Sidebar Overlay */}
+      <div 
+        className={`mobile-sidebar-overlay ${isMobileSidebarOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileSidebarOpen(false)}
+      />
+
+      {/* Admin Sidebar */}
+      <AdminSidebar isMobileOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
+
+      {/* Main Content */}
+      <div className="admin-main-content">
         <AdminHeader />
         
-        <div className="p-4">
+        <div className="admin-content-area">
           <div className="card shadow-sm mb-4" style={{ borderRadius: '15px', border: 'none' }}>
             
             {/* Header bar */}
@@ -856,8 +992,16 @@ const Payroll = () => {
             <div className="card-body" style={{ padding: '20px' }}>
               {!showArchiveHistory ? (
                 <>
-                  <div className="p-6 rounded-lg shadow-md pink-section">
-                    <h2 className="text-xl font-semibold mb-4 text-center" style={{ color: 'black' }}>
+                  <div className="p-6 rounded-lg shadow-md pink-section" style={{ 
+                    background: 'linear-gradient(135deg, #fce4ec 0%, #f8bbd0 100%)',
+                    border: '2px solid #f06a98'
+                  }}>
+                    <h2 className="text-xl font-semibold mb-4 text-center" style={{ 
+                      color: '#c2185b', 
+                      fontSize: '1.5rem',
+                      fontWeight: 'bold',
+                      textShadow: '1px 1px 2px rgba(0,0,0,0.1)'
+                    }}>
                       {editingId ? "Edit Payroll Record" : "Add New Payroll"}
                     </h2>
                     
@@ -874,7 +1018,9 @@ const Payroll = () => {
                             color: 'white', 
                             border: 'none', 
                             whiteSpace: 'nowrap',
-                            minWidth: '150px'
+                            minWidth: '150px',
+                            flex: '0 0 auto',
+                            width: 'auto'
                           }}
                         >
                           <i className="fas fa-minus-circle me-2"></i>
@@ -885,7 +1031,11 @@ const Payroll = () => {
                       {/* Employee Selection */}
                       <div className="mb-3">
                         <div className="flex justify-between items-center mb-2">
-                          <label className="block text-sm font-medium" style={{ color: 'black' }}>Select Employee</label>
+                          <label className="block font-medium" style={{ 
+                            color: '#c2185b', 
+                            fontSize: '1.1rem',
+                            fontWeight: '600'
+                          }}>Select Employee</label>
                         </div>
                         <div style={{ position: 'relative', width: '100%' }}>
                           <select 
@@ -909,9 +1059,21 @@ const Payroll = () => {
                             className="w-full border border-blue-300 rounded p-3 focus:ring-2 focus:ring-blue-500" 
                             style={{ 
                               color: 'black', 
-                              paddingRight: selectedEmployee ? '2.5rem' : undefined
+                              paddingRight: selectedEmployee ? '2.5rem' : undefined,
+                              fontSize: '1rem',
+                              padding: '14px',
+                              transition: 'all 0.3s ease',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                             }}
                             value={selectAll ? 'ALL' : (selectedEmployee?._id || '')}
+                            onMouseEnter={(e) => {
+                              e.target.style.transform = 'scale(1.01)';
+                              e.target.style.boxShadow = '0 4px 8px rgba(240, 106, 152, 0.3)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.transform = 'scale(1)';
+                              e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                            }}
                           >
                             <option value="" disabled hidden>Choose an employee</option>
                             <option value="ALL" style={{ color: 'black' }} disabled={!!editingId}>All Employees</option>
@@ -965,7 +1127,9 @@ const Payroll = () => {
                             color: 'white', 
                             border: 'none', 
                             whiteSpace: 'nowrap',
-                            minWidth: '150px'
+                            minWidth: '150px',
+                            flex: '0 0 auto',
+                            width: 'auto'
                           }}
                         >
                           <i className="fas fa-file-invoice me-2"></i>
@@ -996,21 +1160,69 @@ const Payroll = () => {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="text-center p-3 bg-white rounded-lg border border-green-200">
                             <div className="text-2xl font-bold text-green-600">
-                              ₱{(employeeSalaries[selectedEmployee._id] || 0).toLocaleString()}
+                              ₱{(() => {
+                                // ✅ FIX ISSUE #3: Show salary from most recent payroll record for selected employee
+                                // Find the most recent payroll for this employee
+                                const employeePayrolls = payrolls.filter(p => 
+                                  p.employeeId === selectedEmployee.employeeId || 
+                                  p.employeeName === `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+                                ).sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+                                
+                                const latestPayroll = employeePayrolls[0];
+                                return (latestPayroll?.salary || employeeSalaries[selectedEmployee._id] || 0).toLocaleString();
+                              })()}
                             </div>
                             <div className="text-sm text-green-700">Employee Salary</div>
-                            <div className="text-xs text-green-500 mt-1">From Attendance Records (Current Week)</div>
+                            <div className="text-xs text-green-500 mt-1">
+                              {(() => {
+                                const employeePayrolls = payrolls.filter(p => 
+                                  p.employeeId === selectedEmployee.employeeId || 
+                                  p.employeeName === `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+                                );
+                                return employeePayrolls.length > 0 ? 'From Latest Payroll Record' : 'From Current Week Attendance';
+                              })()}
+                            </div>
                           </div>
                           <div className="text-center p-3 bg-white rounded-lg border border-red-200">
                             <div className="text-2xl font-bold text-red-600">
-                              ₱{calculateEmployeeDeductions(selectedEmployee).toLocaleString()}
+                              ₱{(() => {
+                                // ✅ FIX ISSUE #3: Show deductions from most recent payroll record
+                                const employeePayrolls = payrolls.filter(p => 
+                                  p.employeeId === selectedEmployee.employeeId || 
+                                  p.employeeName === `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+                                ).sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+                                
+                                const latestPayroll = employeePayrolls[0];
+                                return (latestPayroll?.deductions || calculateEmployeeDeductions(selectedEmployee)).toLocaleString();
+                              })()}
                             </div>
                             <div className="text-sm text-red-700">Cash Advances</div>
-                            <div className="text-xs text-red-500 mt-1">From Cash Advance Page</div>
+                            <div className="text-xs text-red-500 mt-1">
+                              {(() => {
+                                const employeePayrolls = payrolls.filter(p => 
+                                  p.employeeId === selectedEmployee.employeeId || 
+                                  p.employeeName === `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+                                );
+                                return employeePayrolls.length > 0 ? 'From Latest Payroll Record' : 'From Cash Advance Page';
+                              })()}
+                            </div>
                           </div>
                           <div className="text-center p-3 bg-white rounded-lg border border-blue-200">
                             <div className="text-2xl font-bold text-blue-600" style={{ color: 'black' }}>
-                              ₱{((employeeSalaries[selectedEmployee._id] || 0) - calculateEmployeeDeductions(selectedEmployee)).toLocaleString()}
+                              ₱{(() => {
+                                // ✅ FIX ISSUE #3: Show net pay from most recent payroll record
+                                const employeePayrolls = payrolls.filter(p => 
+                                  p.employeeId === selectedEmployee.employeeId || 
+                                  p.employeeName === `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+                                ).sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+                                
+                                const latestPayroll = employeePayrolls[0];
+                                if (latestPayroll) {
+                                  return latestPayroll.netSalary.toLocaleString();
+                                } else {
+                                  return ((employeeSalaries[selectedEmployee._id] || 0) - calculateEmployeeDeductions(selectedEmployee)).toLocaleString();
+                                }
+                              })()}
                             </div>
                             <div className="text-sm text-blue-700" style={{ color: 'black' }}>Net Pay</div>
                             <div className="text-xs text-blue-500 mt-1" style={{ color: 'black' }}>Auto-Calculated</div>
@@ -1141,13 +1353,13 @@ const Payroll = () => {
                     </div>
                   </div>
 
-                  {/* PAYSLIP MODAL */}
+                  {/* PAYSLIP MODAL - ✅ FIXED: Reduced width to prevent stretching behind sidebar */}
                   {showPayslipModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                      <div className="bg-white rounded-lg shadow-xl w-11/12 md:w-3/4 lg:w-1/2 max-h-90vh overflow-y-auto">
-                        <div className="p-6">
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="p-4 md:p-6">
                           <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-semibold text-gray-800">View Payslip</h3>
+                            <h3 className="text-lg md:text-xl font-semibold text-gray-800">View Payslip</h3>
                             <button
                               onClick={() => setShowPayslipModal(false)}
                               className="text-gray-500 hover:text-gray-700"
@@ -1213,13 +1425,13 @@ const Payroll = () => {
                     </div>
                   )}
 
-                  {/* MANDATORY DEDUCTION MODAL */}
+                  {/* MANDATORY DEDUCTION MODAL - ✅ FIXED: Reduced width to prevent stretching behind sidebar */}
                   {showMandatoryDeductionModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                      <div className="bg-white rounded-lg shadow-xl w-11/12 md:w-3/4 lg:w-1/2 max-h-90vh overflow-y-auto">
-                        <div className="p-6">
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="p-4 md:p-6">
                           <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-semibold text-gray-800">Mandatory Deductions</h3>
+                            <h3 className="text-lg md:text-xl font-semibold text-gray-800">Mandatory Deductions</h3>
                             <button
                               onClick={() => setShowMandatoryDeductionModal(false)}
                               className="text-gray-500 hover:text-gray-700"
@@ -1317,6 +1529,7 @@ const Payroll = () => {
                     </div>
                   )}
 
+                  {/* ========================================== */}
                   {/* PAYROLL RECORDS TABLE */}
                   <div className="overflow-x-auto bg-white p-4 rounded-lg shadow-md mt-4">
                     <div className="flex justify-between items-center mb-4">
@@ -1424,7 +1637,10 @@ const Payroll = () => {
                           color: '#ffffff',
                           padding: '10px 20px',
                           fontSize: '1rem',
-                          borderRadius: '8px'
+                          borderRadius: '8px',
+                          flex: '0 0 auto',
+                          width: 'auto',
+                          whiteSpace: 'nowrap'
                         }}
                       >
                         <i className="fas fa-archive me-2"></i>
@@ -1432,24 +1648,59 @@ const Payroll = () => {
                       </button>
                     </div>
 
-                    <div style={{ overflowX: 'auto' }}>
-                      <table className="min-w-full table-auto text-sm" style={{ fontSize: '0.875rem', minWidth: '1000px' }}>
+                    <div style={{ overflowX: 'auto', width: '100%' }}>
+                      <table className="min-w-full table-auto text-sm" style={{ fontSize: '0.875rem', minWidth: '1000px', width: '100%' }}>
                         <thead className="bg-gray-100 text-gray-600">
                           <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">#</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Employee ID</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Employee Name</th>
+                            <th 
+                              className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 transition-colors" 
+                              onClick={() => handleSort('employeeId')}
+                            >
+                              Employee ID {getSortIcon('employeeId')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 transition-colors"
+                              onClick={() => handleSort('employeeName')}
+                            >
+                              Employee Name {getSortIcon('employeeName')}
+                            </th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Contact</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Status</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Salary</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Cash Advances</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Net Salary</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Date</th>
+                            <th 
+                              className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 transition-colors"
+                              onClick={() => handleSort('status')}
+                            >
+                              Status {getSortIcon('status')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 transition-colors"
+                              onClick={() => handleSort('salary')}
+                            >
+                              Salary {getSortIcon('salary')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 transition-colors"
+                              onClick={() => handleSort('deductions')}
+                            >
+                              Cash Advances {getSortIcon('deductions')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 transition-colors"
+                              onClick={() => handleSort('netSalary')}
+                            >
+                              Net Salary {getSortIcon('netSalary')}
+                            </th>
+                            <th 
+                              className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 transition-colors"
+                              onClick={() => handleSort('date')}
+                            >
+                              Date {getSortIcon('date')}
+                            </th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="text-gray-700 divide-y divide-gray-200">
-                          {filteredData.map((payroll, index) => {
+                          {getSortedData(filteredData).map((payroll, index) => {
                             const employee = employees.find(emp => 
                               emp.employeeId === payroll.employeeId || 
                               `${emp.firstName} ${emp.lastName}` === payroll.employeeName
@@ -1522,6 +1773,153 @@ const Payroll = () => {
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  {/* ✅ IMPORTANT NOTICE: MOVED BELOW TABLE WITH DROPDOWN */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 p-6 rounded-lg shadow-md mt-6">
+                    <div 
+                      className="cursor-pointer flex items-start"
+                      onClick={() => setShowImportantNotice(!showImportantNotice)}
+                    >
+                      <div className="flex-shrink-0">
+                        <i className="fas fa-info-circle text-blue-500 text-3xl"></i>
+                      </div>
+                      <div className="ml-4 flex-1">
+                        <div className="flex justify-between items-center">
+                          <h3 className="text-xl font-bold text-gray-800">
+                            <i className="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>
+                            Important Notice: Payroll Rules & Parameters
+                          </h3>
+                          <i className={`fas fa-chevron-${showImportantNotice ? 'up' : 'down'} text-blue-600 text-xl`}></i>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {showImportantNotice && (
+                      <div className="ml-4 mt-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* Left Column: Work Week & Payment Rules */}
+                          <div className="space-y-4">
+                            <div className="bg-white p-4 rounded-lg shadow-sm">
+                              <h4 className="font-semibold text-gray-700 mb-2 flex items-center">
+                                <i className="fas fa-calendar-week text-blue-500 mr-2"></i>
+                                Work Week Schedule
+                              </h4>
+                              <ul className="space-y-2 text-sm text-gray-600">
+                                <li className="flex items-start">
+                                  <i className="fas fa-check-circle text-green-500 mr-2 mt-1"></i>
+                                  <span><strong>Work Days:</strong> Monday to Saturday (6 days)</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-times-circle text-red-500 mr-2 mt-1"></i>
+                                  <span><strong>No Work:</strong> Sunday is rest day (no work scheduled)</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-clock text-blue-500 mr-2 mt-1"></i>
+                                  <span><strong>Work Hours:</strong> 8:00 AM - 5:00 PM (8 hours + 1 hour lunch break)</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-stopwatch text-orange-500 mr-2 mt-1"></i>
+                                  <span><strong>Overtime:</strong> Work beyond 8 hours or after 5:00 PM</span>
+                                </li>
+                              </ul>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-lg shadow-sm">
+                              <h4 className="font-semibold text-gray-700 mb-2 flex items-center">
+                                <i className="fas fa-calendar-check text-green-500 mr-2"></i>
+                                Payroll Period & Payment
+                              </h4>
+                              <ul className="space-y-2 text-sm text-gray-600">
+                                <li className="flex items-start">
+                                  <i className="fas fa-arrow-right text-blue-500 mr-2 mt-1"></i>
+                                  <span><strong>Pay Period:</strong> Monday to Saturday (weekly)</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-cut text-red-500 mr-2 mt-1"></i>
+                                  <span><strong>Cut-off Day:</strong> Every Sunday (payroll calculation)</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-money-bill-wave text-green-500 mr-2 mt-1"></i>
+                                  <span><strong>Payment Day:</strong> Following Monday (salary release)</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-info-circle text-blue-500 mr-2 mt-1"></i>
+                                  <span><strong>Example:</strong> Work Oct 13-18 (Mon-Sat) → Cut-off Oct 19 (Sun) → Pay Oct 20 (Mon)</span>
+                                </li>
+                              </ul>
+                            </div>
+                          </div>
+
+                          {/* Right Column: Salary Calculation & Deductions */}
+                          <div className="space-y-4">
+                            <div className="bg-white p-4 rounded-lg shadow-sm">
+                              <h4 className="font-semibold text-gray-700 mb-2 flex items-center">
+                                <i className="fas fa-calculator text-purple-500 mr-2"></i>
+                                Salary Calculation Rules
+                              </h4>
+                              <ul className="space-y-2 text-sm text-gray-600">
+                                <li className="flex items-start">
+                                  <i className="fas fa-coins text-yellow-500 mr-2 mt-1"></i>
+                                  <span><strong>Current Rate:</strong> ₱{salaryRate.dailyRate}/day, ₱{salaryRate.hourlyRate}/hr, ₱{salaryRate.overtimeRate}/hr OT</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-sun text-yellow-500 mr-2 mt-1"></i>
+                                  <span><strong>Full Day:</strong> 6.5-8 hours worked = 100% daily rate (₱{salaryRate.dailyRate})</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-cloud-sun text-orange-500 mr-2 mt-1"></i>
+                                  <span><strong>Half Day:</strong> 4-6.5 hours worked = Variable pay by actual hours</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-moon text-blue-500 mr-2 mt-1"></i>
+                                  <span><strong>Overtime:</strong> Hours beyond 8 hours × ₱{salaryRate.overtimeRate}/hr</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-times text-red-500 mr-2 mt-1"></i>
+                                  <span><strong>Invalid:</strong> Less than 4 hours worked = No pay (0%)</span>
+                                </li>
+                              </ul>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-lg shadow-sm">
+                              <h4 className="font-semibold text-gray-700 mb-2 flex items-center">
+                                <i className="fas fa-hand-holding-usd text-red-500 mr-2"></i>
+                                Deductions & Cash Advance
+                              </h4>
+                              <ul className="space-y-2 text-sm text-gray-600">
+                                <li className="flex items-start">
+                                  <i className="fas fa-piggy-bank text-pink-500 mr-2 mt-1"></i>
+                                  <span><strong>Cash Advance:</strong> Automatically deducted from weekly payroll</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-receipt text-blue-500 mr-2 mt-1"></i>
+                                  <span><strong>Mandatory Deductions:</strong> Government-required deductions (if applicable)</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-calculator text-green-500 mr-2 mt-1"></i>
+                                  <span><strong>Net Salary:</strong> Gross Salary - Total Deductions</span>
+                                </li>
+                                <li className="flex items-start">
+                                  <i className="fas fa-chart-line text-purple-500 mr-2 mt-1"></i>
+                                  <span><strong>Formula:</strong> (Work Days × Daily Rate) + (OT Hours × OT Rate) - Deductions</span>
+                                </li>
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bottom Notice */}
+                        <div className="mt-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+                          <p className="text-sm text-gray-700">
+                            <i className="fas fa-bell text-yellow-500 mr-2"></i>
+                            <strong>Note:</strong> All salary calculations are based on actual attendance records from the Attendance page. 
+                            Salary rates are set in the Salary Management page and automatically applied to all payroll calculations.
+                            Cash advances from the Cash Advance page are automatically deducted from weekly payroll.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (

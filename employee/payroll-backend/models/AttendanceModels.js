@@ -43,9 +43,9 @@ const attendanceSchema = new mongoose.Schema({
   },
   dayType: {
     type: String,
-    enum: ['Full Day', 'Half Day', 'Incomplete', 'Absent'],
+    enum: ['Full Day', 'Half Day', 'Incomplete', 'Absent', 'Overtime'],
     default: null,
-    description: 'Calculated day type based on time-in and hours worked'
+    description: 'Calculated day type based on time-in and hours worked. Overtime = worked >8 hours with time-out after 5PM'
   },
   actualHoursWorked: {
     type: Number,
@@ -99,11 +99,22 @@ const attendanceSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// Index for faster queries
-attendanceSchema.index({ employee: 1, date: 1 });
-attendanceSchema.index({ employeeId: 1, date: 1 });
-attendanceSchema.index({ dayType: 1, date: 1 });
-attendanceSchema.index({ timeInStatus: 1 });
+// ✅ CRITICAL PERFORMANCE FIX: Comprehensive indexes for all query patterns
+// Compound indexes for common query patterns (order matters!)
+attendanceSchema.index({ employee: 1, date: -1, archived: 1 }); // Primary lookup by employee
+attendanceSchema.index({ employeeId: 1, date: -1, archived: 1 }); // Alternative lookup
+attendanceSchema.index({ date: -1, archived: 1 }); // Date range queries
+attendanceSchema.index({ archived: 1, date: -1 }); // Archive filtering
+attendanceSchema.index({ dayType: 1, date: -1 }); // Day type filtering
+attendanceSchema.index({ timeInStatus: 1, date: -1 }); // Status filtering
+attendanceSchema.index({ status: 1, date: -1 }); // Status queries
+
+// ✅ Performance optimization: sparse index for timeIn/timeOut
+attendanceSchema.index({ timeIn: -1 }, { sparse: true }); // Time-in sorting
+attendanceSchema.index({ timeOut: -1 }, { sparse: true }); // Time-out sorting
+
+// ✅ Text index for notes search (if needed)
+attendanceSchema.index({ notes: 'text' }, { sparse: true });
 
 // Virtual to format date
 attendanceSchema.virtual('formattedDate').get(function() {

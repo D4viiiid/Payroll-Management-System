@@ -3,6 +3,7 @@ import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import logo from '../assets/logo.png';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
+import './Admin.responsive.css';
 
 const Payslip = () => {
   const { employeeId } = useParams();
@@ -12,6 +13,7 @@ const Payslip = () => {
   const [employeePayrolls, setEmployeePayrolls] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Format date function
   const formatDate = (dateString) => {
@@ -445,16 +447,33 @@ const Payslip = () => {
   }
 
   return (
-    <div className="d-flex" style={{ minHeight: '100vh', background: '#f8f9fb' }}>
-      {/* ✅ FIX ISSUE 4: Use unified AdminSidebar component */}
-      <AdminSidebar />
+    <div className="admin-page-wrapper">
+      {/* Mobile Hamburger Menu */}
+      <button
+        className="hamburger-menu-button"
+        onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+        aria-label="Toggle Menu"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
 
-      {/* Main Content - WITH MARGIN FOR FIXED SIDEBAR */}
-      <div className="flex-1 overflow-auto" style={{ marginLeft: 280 }}>
+      {/* Mobile Sidebar Overlay */}
+      <div 
+        className={`mobile-sidebar-overlay ${isMobileSidebarOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileSidebarOpen(false)}
+      />
+
+      {/* Admin Sidebar */}
+      <AdminSidebar isMobileOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
+
+      {/* Main Content */}
+      <div className="admin-main-content">
         {/* ✅ FIX ISSUE 4: Use unified AdminHeader component */}
         <AdminHeader />
         
-        <div className="p-4">
+        <div className="admin-content-area">
           <div className="card shadow-sm mb-4" style={{ borderRadius: '15px', border: 'none' }}>
             
             {/* Header bar */}
@@ -479,7 +498,7 @@ const Payslip = () => {
                   <button
                     onClick={handlePrint}
                     className="btn btn-success px-3 py-2.5 rounded-lg text-sm d-flex align-items-center gap-2"
-                    style={{ backgroundColor: '#28a745', color: 'white', border: 'none' }}
+                    style={{ backgroundColor: '#28a745', color: 'white', border: 'none', flex: '0 0 auto', width: 'auto', whiteSpace: 'nowrap' }}
                   >
                     <i className="fas fa-print"></i>
                     Print Payslip
@@ -487,7 +506,7 @@ const Payslip = () => {
                   <button
                     onClick={() => navigate('/payroll')}
                     className="btn btn-pink px-3 py-2.5 rounded-lg text-sm"
-                    style={{ backgroundColor: '#f06a98', color: 'white', border: 'none' }}
+                    style={{ backgroundColor: '#f06a98', color: 'white', border: 'none', flex: '0 0 auto', width: 'auto', whiteSpace: 'nowrap' }}
                   >
                     Back to Payroll
                   </button>
@@ -712,6 +731,7 @@ const Payslip = () => {
                       <button
                         onClick={handlePrint}
                         className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg d-flex align-items-center gap-2 transition duration-300"
+                        style={{ flex: '0 0 auto', width: 'auto', whiteSpace: 'nowrap' }}
                       >
                         <i className="fas fa-print"></i>
                         Print Payslip

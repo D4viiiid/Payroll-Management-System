@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken'; // ✅ Add JWT for token generation
 import { sendEmployeeCredentialsEmail } from '../services/emailService.js';
 import { getPaginationParams, createPaginatedResponse, optimizeMongooseQuery } from '../utils/paginationHelper.js';
 import { setCacheHeaders } from '../middleware/cacheMiddleware.js';
@@ -42,37 +43,51 @@ function generateTempPassword() {
 }
 
 // GET all employees - OPTIMIZED with pagination and caching
-router.get('/', setCacheHeaders(300), async (req, res) => {
+// ✅ FIX: Remove HTTP caching to prevent stale data after create/delete operations
+router.get('/', async (req, res) => {
+  // ✅ CRITICAL FIX: Set no-cache headers to prevent browser HTTP caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  
   try {
+    // ✅ PERFORMANCE FIX: Start timing
+    const startTime = Date.now();
+    
     // Check if pagination is requested
     const { page, limit, skip } = getPaginationParams(req.query);
     
     // If pagination requested (page param exists), use paginated response
     if (req.query.page) {
-      const totalCount = await Employee.countDocuments();
+      // ✅ CRITICAL PERFORMANCE FIX: Run count and query in parallel
+      const [totalCount, employees] = await Promise.all([
+        Employee.countDocuments().exec(),
+        
+        Employee.find()
+          .select('firstName lastName email employeeId contactNumber status position hireDate isActive isAdmin fingerprintEnrolled') // Only select needed fields
+          .limit(limit)
+          .skip(skip)
+          .sort({ createdAt: -1 })
+          .lean() // Convert to plain objects for faster JSON serialization
+          .exec()
+      ]);
       
-      // Optimized query with lean() and select()
-      const employees = await optimizeMongooseQuery(
-        Employee.find(),
-        {
-          lean: true,
-          select: '-__v', // Exclude version key
-          limit,
-          skip,
-          sort: '-createdAt'
-        }
-      );
+      const endTime = Date.now();
+      console.log(`⚡ GET /employees (paginated): ${endTime - startTime}ms`);
       
       const response = createPaginatedResponse(employees, totalCount, { page, limit });
       return res.json(response);
     }
     
-    // Default: Return all employees (for backward compatibility)
-    // But optimize the query with lean() for better performance
+    // ✅ PERFORMANCE FIX: Default query optimized with lean() and field selection
     const employees = await Employee.find()
-      .select('-__v')  // Exclude version key only, don't force plainTextPassword
+      .select('firstName lastName email employeeId contactNumber status position hireDate isActive isAdmin fingerprintEnrolled')  // Specific fields only
       .sort({ createdAt: -1 })
-      .lean();
+      .lean() // Use lean() for 5-10x faster queries
+      .exec();
+    
+    const endTime = Date.now();
+    console.log(`⚡ GET /employees: ${endTime - startTime}ms`);
     
     res.json(employees);
   } catch (err) {
@@ -288,16 +303,96 @@ router.get('/:id', async (req, res) => {
 // UPDATE an employee by ID
 router.put('/:id', async (req, res) => {
   try {
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    console.log('=== UPDATE EMPLOYEE REQUEST ===');
+    console.log('Employee ID:', req.params.id);
+    console.log('Update data:', JSON.stringify(req.body, null, 2));
+
+    // ✅ FIX: Allow admin profile updates (email, contact, name) but protect credentials
+    if (employee.isAdmin) {
+      // Protect username changes
+      if (req.body.username !== undefined && req.body.username !== employee.username) {
+        return res.status(403).json({ 
+          message: 'Cannot change admin username through this endpoint. Use Admin Settings > Change Credentials instead.',
+          field: 'username'
+        });
+      }
+      
+      // Protect password changes
+      if (req.body.password !== undefined) {
+        return res.status(403).json({ 
+          message: 'Cannot change admin password through this endpoint. Use Admin Settings > Change Credentials instead.',
+          field: 'password'
+        });
+      }
+      
+      // Protect PIN changes
+      if (req.body.adminPin !== undefined) {
+        return res.status(403).json({ 
+          message: 'Cannot change admin PIN through this endpoint. Use Admin Settings > Change Credentials instead.',
+          field: 'adminPin'
+        });
+      }
+      
+      // Protect employeeId changes
+      if (req.body.employeeId !== undefined && req.body.employeeId !== employee.employeeId) {
+        return res.status(403).json({ 
+          message: 'Cannot change admin employee ID.',
+          field: 'employeeId'
+        });
+      }
+      
+      console.log('✅ Admin profile update allowed (non-credential fields)');
+    }
+
+    // Handle fingerprint re-enrollment
+    if (req.body.fingerprintTemplate !== undefined) {
+      // Check if this is a re-enrollment (employee already has fingerprint)
+      if (employee.fingerprintEnrolled && employee.fingerprintTemplate) {
+        // Check enrollment count
+        const currentCount = employee.fingerprintEnrollmentCount || 0;
+        if (currentCount >= 3) {
+          return res.status(400).json({ 
+            message: 'Maximum fingerprint enrollment limit reached (3 times). Contact administrator for reset.',
+            enrollmentCount: currentCount
+          });
+        }
+        // Increment enrollment count and track history
+        req.body.fingerprintEnrollmentCount = currentCount + 1;
+        req.body.fingerprintEnrollmentHistory = [...(employee.fingerprintEnrollmentHistory || []), new Date()];
+        
+        console.log(`📝 Fingerprint re-enrollment #${currentCount + 1} for ${employee.employeeId}`);
+      } else {
+        // First-time enrollment
+        req.body.fingerprintEnrollmentCount = 1;
+        req.body.fingerprintEnrollmentHistory = [new Date()];
+        console.log(`📝 First-time fingerprint enrollment for ${employee.employeeId}`);
+      }
+
+      // Set fingerprint enrolled flag if template is provided
+      if (req.body.fingerprintTemplate && req.body.fingerprintTemplate.trim() !== '') {
+        req.body.fingerprintEnrolled = true;
+      }
+    }
+
     const updatedEmployee = await Employee.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     );
-    if (!updatedEmployee) {
-      return res.status(404).json({ message: 'Employee not found' });
+
+    console.log('✅ Employee updated successfully:', updatedEmployee.employeeId);
+    if (updatedEmployee.fingerprintEnrollmentCount) {
+      console.log(`   Enrollment count: ${updatedEmployee.fingerprintEnrollmentCount}/3`);
     }
+
     res.json(updatedEmployee);
   } catch (err) {
+    console.error('❌ Error updating employee:', err);
     res.status(400).json({ message: 'Failed to update employee', error: err.message });
   }
 });
@@ -491,30 +586,45 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Username and password are required' });
     }
 
-    // Find employee by username or employeeId
-    const employee = await Employee.findOne({
-      $or: [
-        { username: username },
-        { employeeId: username }
-      ],
-      isActive: true
-    });
+    // ✅ CRITICAL PERFORMANCE FIX: Optimize query to use compound indexes
+    // Try username first (most common), then employeeId as fallback
+    let employee = await Employee.findOne({ username: username, isActive: true })
+      .select('+password'); // Explicitly select password field
+    
+    // If not found by username, try employeeId
+    if (!employee) {
+      employee = await Employee.findOne({ employeeId: username, isActive: true })
+        .select('+password');
+    }
 
     if (!employee) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Check password
-    console.log('=== LOGIN ATTEMPT ===');
-    console.log('Login attempt for user:', username);
-    console.log('Employee found:', employee.firstName, employee.lastName, '(ID:', employee.employeeId + ')');
-    console.log('Stored hashed password starts with:', employee.password.substring(0, 20) + '...');
-    console.log('Password provided by user (first 3 chars):', password.substring(0, 3) + '...');
-    const isPasswordValid = await employee.comparePassword(password);
-    console.log('Password validation result:', isPasswordValid);
-    console.log('====================');
+    // ✅ PERFORMANCE FIX: Use bcrypt.compare directly for faster comparison
+    // Remove verbose logging to speed up response
+    const isPasswordValid = await bcrypt.compare(password, employee.password);
+    
     if (!isPasswordValid) {
       return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    // ✅ FIX ISSUE #2: Check if admin requires PIN verification
+    if (employee.isAdmin && employee.adminPin) {
+      // Admin with PIN - require PIN verification
+      return res.json({
+        message: 'Password verified. PIN verification required.',
+        requiresPin: true,
+        employee: {
+          _id: employee._id,
+          employeeId: employee.employeeId,
+          username: employee.username,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+          isAdmin: employee.isAdmin,
+          adminPin: true // ✅ FIX: Include PIN status so frontend knows PIN is configured
+        }
+      });
     }
 
     // Update last login
@@ -524,25 +634,246 @@ router.post('/login', async (req, res) => {
     // Check if password needs to be changed
     const requiresPasswordChange = !employee.passwordChanged;
 
+    // ✅ FIX ISSUE #1: Generate JWT token for authentication
+    const token = jwt.sign(
+      { 
+        id: employee._id, 
+        employeeId: employee.employeeId,
+        username: employee.username,
+        isAdmin: employee.isAdmin || false
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '90d' }
+    );
+
     res.json({
       message: 'Login successful',
       requiresPasswordChange,
+      token, // ✅ Send JWT token to frontend
       employee: {
         _id: employee._id,
         firstName: employee.firstName,
         lastName: employee.lastName,
         email: employee.email,
         employeeId: employee.employeeId,
+        username: employee.username,
         position: employee.position,
         department: employee.department,
         salary: employee.salary,
         hireDate: employee.hireDate,
-        passwordChanged: employee.passwordChanged
+        passwordChanged: employee.passwordChanged,
+        isAdmin: employee.isAdmin || false, // ✅ Include admin flag
+        adminPin: employee.adminPin ? true : false // ✅ Include PIN status (not the actual PIN)
       }
     });
   } catch (err) {
     console.error('Error during login:', err);
     res.status(500).json({ message: 'Login failed', error: err.message });
+  }
+});
+
+// 🔐 POST verify admin PIN (after username/password login)
+router.post('/admin/verify-pin', async (req, res) => {
+  try {
+    const { employeeId, pin } = req.body;
+
+    if (!employeeId || !pin) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Employee ID and PIN are required' 
+      });
+    }
+
+    // Validate PIN format (6 digits)
+    if (!/^\d{6}$/.test(pin)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'PIN must be exactly 6 digits' 
+      });
+    }
+
+    // Find admin employee - optimized query with select
+    const employee = await Employee.findOne({ 
+      $or: [{ employeeId }, { username: employeeId }],
+      isAdmin: true,
+      isActive: true
+    }).select('adminPin lastLogin');
+
+    if (!employee) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Admin account not found' 
+      });
+    }
+
+    // Check if PIN is set
+    if (!employee.adminPin) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'PIN not set. Please set up your PIN first.',
+        requiresPinSetup: true
+      });
+    }
+
+    // Verify PIN with bcrypt
+    const isPinValid = await bcrypt.compare(pin, employee.adminPin);
+
+    if (!isPinValid) {
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid PIN' 
+      });
+    }
+
+    // Update last login (non-blocking)
+    employee.lastLogin = new Date();
+    employee.save().catch(err => console.error('Error updating lastLogin:', err));
+
+    // Send success response immediately (don't wait for save)
+    res.json({ 
+      success: true,
+      message: 'PIN verified successfully'
+    });
+  } catch (err) {
+    console.error('PIN verification error:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error during PIN verification' 
+    });
+  }
+});
+
+// 🔐 PUT update admin credentials (username, password, PIN)
+router.put('/admin/change-credentials', async (req, res) => {
+  try {
+    const { employeeId, currentPassword, newUsername, newPassword, newPin } = req.body;
+
+    if (!currentPassword) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Current password is required' 
+      });
+    }
+
+    // Find admin employee - if employeeId not provided, get from localStorage on frontend
+    let employee;
+    if (employeeId) {
+      employee = await Employee.findOne({ 
+        $or: [{ employeeId }, { username: employeeId }, { _id: employeeId }],
+        isAdmin: true,
+        isActive: true
+      }).select('+password');
+    } else {
+      // If no employeeId, find the first admin (there should only be one primary admin)
+      employee = await Employee.findOne({ 
+        isAdmin: true,
+        isActive: true
+      }).select('+password');
+    }
+
+    if (!employee) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Admin account not found' 
+      });
+    }
+
+    // Verify current password
+    const isPasswordValid = await employee.comparePassword(currentPassword);
+    if (!isPasswordValid) {
+      return res.status(401).json({ 
+        success: false,
+        message: 'Current password is incorrect' 
+      });
+    }
+
+    const updates = {};
+
+    // Update username if provided
+    if (newUsername && newUsername !== employee.username) {
+      // Check if username is already taken
+      const existingUser = await Employee.findOne({ 
+        username: newUsername,
+        _id: { $ne: employee._id }
+      });
+      if (existingUser) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Username already taken' 
+        });
+      }
+      updates.username = newUsername;
+    }
+
+    // Update password if provided
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'New password must be at least 6 characters' 
+        });
+      }
+      // Validate password complexity
+      if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Password must contain at least one uppercase letter, one lowercase letter, and one number' 
+        });
+      }
+      // Hash password
+      updates.password = await bcrypt.hash(newPassword, 10);
+    }
+
+    // Update PIN if provided
+    if (newPin) {
+      // Validate PIN format (6 digits)
+      if (!/^\d{6}$/.test(newPin)) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'PIN must be exactly 6 digits' 
+        });
+      }
+      // Hash PIN
+      updates.adminPin = await bcrypt.hash(newPin, 10);
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'No updates provided' 
+      });
+    }
+
+    // Update employee
+    const updatedEmployee = await Employee.findByIdAndUpdate(
+      employee._id, 
+      updates, 
+      { new: true, runValidators: false }
+    );
+
+    console.log('✅ Admin credentials updated:', employee.employeeId);
+    console.log('   Updated fields:', Object.keys(updates).join(', '));
+
+    res.json({ 
+      success: true,
+      message: 'Admin credentials updated successfully',
+      employee: {
+        _id: updatedEmployee._id,
+        employeeId: updatedEmployee.employeeId,
+        username: updatedEmployee.username,
+        firstName: updatedEmployee.firstName,
+        lastName: updatedEmployee.lastName,
+        email: updatedEmployee.email,
+        isAdmin: updatedEmployee.isAdmin
+      }
+    });
+  } catch (err) {
+    console.error('Error updating admin credentials:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to update credentials', 
+      error: err.message 
+    });
   }
 });
 

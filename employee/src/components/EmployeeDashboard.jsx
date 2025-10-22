@@ -7,6 +7,8 @@ import { logger } from '../utils/logger';
 import { compressImage, validateImageFile, formatFileSize } from '../utils/imageOptimization';
 import logo from '../assets/logo.png';
 import ChangePassword from './ChangePassword';
+import HamburgerMenu from './HamburgerMenu';
+import './EmployeeDashboard.responsive.css';
 
 // Status Badge Component - SAME AS ADMIN
 const StatusBadge = ({ status }) => {
@@ -69,6 +71,7 @@ const EmployeeDashboard = () => {
   const [showPayrollDetails, setShowPayrollDetails] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [uploadingPicture, setUploadingPicture] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // ✅ NEW: Sidebar toggle state for mobile
   const fileInputRef = useRef(null);
 
   // Function to transform attendance data to display format
@@ -934,6 +937,8 @@ const EmployeeDashboard = () => {
   };
 
   const handleLogout = () => {
+    // Close sidebar before logout (for smooth UX)
+    setSidebarOpen(false);
     // Clear any stored data and redirect to login
     localStorage.removeItem('currentEmployee');
     localStorage.removeItem('userRole');
@@ -1031,13 +1036,23 @@ const EmployeeDashboard = () => {
   const filteredPayroll = getFilteredData(payroll || [], 'payroll');
 
   return (
-    <div className="d-flex" style={{ minHeight: '100vh', background: '#f8f9fb' }}>
-      {/* Sidebar - Same size and color as Admin */}
-      <div className="shadow-sm p-4" style={{ 
-        width: 280, 
-        backgroundColor: '#f06a98',
-        minHeight: '100vh'
-      }}>
+    <div className="employee-dashboard-container">
+      {/* Hamburger Menu - Mobile/Tablet Only */}
+      <HamburgerMenu 
+        isOpen={sidebarOpen} 
+        onClick={() => setSidebarOpen(!sidebarOpen)} 
+      />
+
+      {/* Sidebar Overlay - Mobile/Tablet Only */}
+      {sidebarOpen && (
+        <div 
+          className="sidebar-overlay" 
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Left side navigation */}
+      <div className={`employee-sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         {/* Logo/Header Section */}
         <h4 className="fw-bold mb-4" style={{ 
           color: 'white', 
@@ -1146,7 +1161,10 @@ const EmployeeDashboard = () => {
           <li className="nav-item mb-2">
             <button 
               className={`nav-link w-100 text-start d-flex align-items-center ${activeTab === 'profile' ? 'active' : ''}`}
-              onClick={() => setActiveTab('profile')}
+              onClick={() => {
+                setActiveTab('profile');
+                setSidebarOpen(false);
+              }}
               style={{ 
                 color: 'white',
                 fontSize: '0.95rem',
@@ -1176,7 +1194,10 @@ const EmployeeDashboard = () => {
           <li className="nav-item mb-2">
             <button 
               className={`nav-link w-100 text-start d-flex align-items-center ${activeTab === 'deductions' ? 'active' : ''}`}
-              onClick={() => setActiveTab('deductions')}
+              onClick={() => {
+                setActiveTab('deductions');
+                setSidebarOpen(false);
+              }}
               style={{ 
                 color: 'white',
                 fontSize: '0.95rem',
@@ -1206,7 +1227,10 @@ const EmployeeDashboard = () => {
           <li className="nav-item mb-2">
             <button 
               className={`nav-link w-100 text-start d-flex align-items-center ${activeTab === 'attendance' ? 'active' : ''}`}
-              onClick={() => setActiveTab('attendance')}
+              onClick={() => {
+                setActiveTab('attendance');
+                setSidebarOpen(false);
+              }}
               style={{ 
                 color: 'white',
                 fontSize: '0.95rem',
@@ -1236,7 +1260,10 @@ const EmployeeDashboard = () => {
           <li className="nav-item mb-2">
             <button
               className={`nav-link w-100 text-start d-flex align-items-center ${activeTab === 'payslip' ? 'active' : ''}`}
-              onClick={() => setActiveTab('payslip')}
+              onClick={() => {
+                setActiveTab('payslip');
+                setSidebarOpen(false);
+              }}
               style={{
                 color: 'white',
                 fontSize: '0.95rem',
@@ -1325,8 +1352,8 @@ const EmployeeDashboard = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="p-4">
+      <div className="employee-main-content">
+        <div className="employee-content-wrapper">
           {/* Header Card with Clock */}
           <div className="card shadow-lg mb-4" style={{ 
             borderRadius: '15px', 
@@ -1550,7 +1577,7 @@ const EmployeeDashboard = () => {
                           )}
                         </div>
                       ) : (
-                        <div className="table-container" style={{ borderRadius: '8px', overflow: 'hidden' }}>
+                        <div className="table-container" style={{ borderRadius: '8px', overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}>
                           <table className="min-w-full table-auto text-sm">
                             <thead style={{ background: '#f06a98', color: 'white' }}>
                               <tr>
@@ -1704,7 +1731,7 @@ const EmployeeDashboard = () => {
                           )}
                         </div>
                       ) : (
-                        <div className="table-container" style={{ borderRadius: '8px', overflow: 'hidden' }}>
+                        <div className="table-container" style={{ borderRadius: '8px', overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}>
                           <table className="min-w-full table-auto text-sm">
                             <thead style={{ background: '#f06a98', color: 'white' }}>
                               <tr>
@@ -1863,7 +1890,7 @@ const EmployeeDashboard = () => {
                           )}
                         </div>
                       ) : (
-                        <div className="table-container" style={{ borderRadius: '8px', overflow: 'hidden' }}>
+                        <div className="table-container" style={{ borderRadius: '8px', overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}>
                           <table className="min-w-full table-auto text-sm">
                             <thead style={{ background: '#f06a98', color: 'white' }}>
                               <tr>

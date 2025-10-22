@@ -5,6 +5,7 @@ import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import { optimizedMemo } from '../utils/reactOptimization';
 import { logger } from '../utils/logger';
+import './Admin.responsive.css';
 
 // Memoized Employee Row Component for better performance
 const EmployeeRow = optimizedMemo(
@@ -56,12 +57,15 @@ const EmployeeRow = optimizedMemo(
     </tr>
   ),
   (prevProps, nextProps) => {
-    // Only re-render if employee data changes
+    // ✅ CRITICAL FIX: Check ALL displayed fields to ensure re-render when ANY field changes
     return (
       prevProps.employee._id === nextProps.employee._id &&
       prevProps.employee.firstName === nextProps.employee.firstName &&
       prevProps.employee.lastName === nextProps.employee.lastName &&
+      prevProps.employee.email === nextProps.employee.email &&
+      prevProps.employee.contactNumber === nextProps.employee.contactNumber &&
       prevProps.employee.status === nextProps.employee.status &&
+      prevProps.employee.hireDate === nextProps.employee.hireDate &&
       prevProps.employee.fingerprintEnrolled === nextProps.employee.fingerprintEnrolled &&
       prevProps.index === nextProps.index
     );
@@ -97,6 +101,8 @@ const Employee = () => {
   const [isEnrollingFingerprint, setIsEnrollingFingerprint] = useState(false);
   const [fingerprintStep, setFingerprintStep] = useState(0); // 0: not started, 1: scanning, 2: success
   const [capturedFingerprintTemplate, setCapturedFingerprintTemplate] = useState(null); // Store captured template
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // Mobile sidebar toggle
+  const [showReEnrollSection, setShowReEnrollSection] = useState(false); // For re-enrollment in edit mode
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -117,32 +123,48 @@ const Employee = () => {
     fetchEmployees();
 
     // Listen to eventBus events for real-time updates
-    const handleEmployeeCreated = () => fetchEmployees();
-    const handleEmployeeUpdated = () => fetchEmployees();
+    const handleEmployeeCreated = () => {
+      console.log('🎉 EmployeeList: Received employee-created event, calling fetchEmployees(true)');
+      fetchEmployees(true); // ✅ Bypass cache
+    };
+    const handleEmployeeUpdated = () => {
+      console.log('📝 EmployeeList: Received employee-updated event, calling fetchEmployees(true)');
+      fetchEmployees(true); // ✅ Bypass cache
+    };
     const handleEmployeeDeleted = (data) => {
-      // Remove the deleted employee from the list
+      console.log('🗑️ EmployeeList: Received employee-deleted event for ID:', data.id);
+      // Remove the deleted employee from the list immediately
       setEmployees(prev => prev.filter(emp => emp._id !== data.id));
+      // Also fetch fresh data to ensure consistency
+      console.log('🔄 EmployeeList: Calling fetchEmployees(true) after delete');
+      fetchEmployees(true); // ✅ Bypass cache
     };
 
+    console.log('🔧 EmployeeList: Registering event listeners');
     eventBus.on('employee-created', handleEmployeeCreated);
     eventBus.on('employee-updated', handleEmployeeUpdated);
     eventBus.on('employee-deleted', handleEmployeeDeleted);
+    console.log('✅ EmployeeList: Event listeners registered');
 
     // Cleanup listeners on unmount
     return () => {
+      console.log('🧹 EmployeeList: Cleaning up event listeners');
       eventBus.removeListener('employee-created', handleEmployeeCreated);
       eventBus.removeListener('employee-updated', handleEmployeeUpdated);
       eventBus.removeListener('employee-deleted', handleEmployeeDeleted);
     };
   }, []);
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = async (bypassCache = false) => {
     try {
+      console.log('📡 EmployeeList: fetchEmployees called with bypassCache=', bypassCache);
       setLoading(true);
-      const data = await employeeApi.getAll();
+      const data = await employeeApi.getAll({ bypassCache });
+      console.log('📦 EmployeeList: Received data from API:', data ? `${data.length || data.data?.length || data.employees?.length || 0} employees` : 'no data');
       // Handle both paginated response {data: []} and plain array []
       const employeeList = Array.isArray(data) ? data : (data.data || data.employees || []);
       setEmployees(employeeList);
+      console.log('✅ EmployeeList: State updated with', employeeList.length, 'employees');
       setError(null);
     } catch (err) {
       logger.error('Error fetching employees:', err);
@@ -344,27 +366,63 @@ const handleFingerprintEnrollment = async () => {
         return;
       }
 
-      const employeeData = {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        employeeId: formData.employeeId,
-        contactNumber: formData.contactNumber,
-        hireDate: formData.date,
-        salary: parseFloat(formData.salary),
-        status: formData.status,
-        username: formData.username,
-        password: formData.password,
-        plainTextPassword: formData.plainTextPassword, // ✅ INCLUDE PLAIN TEXT PASSWORD
-        fingerprintEnrolled: false // Will be set to true after actual enrollment
-      };
+      // ✅ FIX: Build employeeData differently for edit vs create
+      let employeeData;
+      
+      if (editingEmployee) {
+        // EDIT MODE: Only send fields that can be updated (NO username/password/employeeId)
+        employeeData = {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          contactNumber: formData.contactNumber,
+          hireDate: formData.date,
+          salary: parseFloat(formData.salary),
+          status: formData.status
+          // ❌ DON'T send: username, password, employeeId, plainTextPassword
+        };
+      } else {
+        // CREATE MODE: Send all fields including credentials
+        employeeData = {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          employeeId: formData.employeeId,
+          contactNumber: formData.contactNumber,
+          hireDate: formData.date,
+          salary: parseFloat(formData.salary),
+          status: formData.status,
+          username: formData.username,
+          password: formData.password,
+          plainTextPassword: formData.plainTextPassword,
+          fingerprintEnrolled: false
+        };
+      }
 
       logger.log('📤 Submitting employee data:', employeeData);
 
       let createdEmployee;
       
       if (editingEmployee) {
-        await employeeApi.update(editingEmployee._id, employeeData);
+        // Update employee and get the updated data
+        const updateResult = await employeeApi.update(editingEmployee._id, employeeData);
+        
+        if (updateResult.error) {
+          throw new Error(updateResult.error);
+        }
+        
+        // ✅ CRITICAL FIX: Update local state immediately with the updated employee
+        const updatedEmployee = updateResult.data || updateResult;
+        setEmployees(prevEmployees => 
+          prevEmployees.map(emp => 
+            emp._id === editingEmployee._id ? { ...emp, ...updatedEmployee } : emp
+          )
+        );
+        
+        // ✅ Fetch fresh data from server to ensure consistency
+        await fetchEmployees(true);
+        
+        // Close modal after state is updated
         setShowEditForm(false);
         setEditingEmployee(null);
         alert('Employee updated successfully!');
@@ -426,7 +484,8 @@ const handleFingerprintEnrollment = async () => {
       });
       setCapturedFingerprintTemplate(null); // Clear stored template
       
-      await fetchEmployees();
+      // ✅ DON'T call fetchEmployees here - the event bus will handle it
+      // The 'employee-created' or 'employee-updated' event will trigger the event listener
       setError(null);
     } catch (err) {
       logger.error('Error saving employee:', err);
@@ -443,16 +502,32 @@ const handleFingerprintEnrollment = async () => {
         setLoading(true);
         const result = await employeeApi.delete(id);
         if (!result.error) {
-          // Immediately remove the employee from the local state
-          setEmployees(prev => prev.filter(emp => emp._id !== id));
           alert('Employee deleted successfully!');
+          // ✅ DON'T call fetchEmployees here - the event bus will handle it
+          // The 'employee-deleted' event will trigger the event listener above
         } else {
-          alert('Error: ' + result.error);
+          // Handle specific error: Employee already deleted
+          if (result.error.includes('Employee not found')) {
+            alert('This employee has already been deleted. Refreshing list...');
+            // Remove from local state and refresh with BYPASS CACHE
+            setEmployees(prev => prev.filter(emp => emp._id !== id));
+            await fetchEmployees(true); // ✅ Manual fetch only for error case
+          } else {
+            alert('Error: ' + result.error);
+          }
         }
         setError(null);
       } catch (err) {
         setError(err.message);
-        alert('Error: ' + err.message);
+        // Handle specific error: Employee already deleted
+        if (err.message.includes('Employee not found')) {
+          alert('This employee has already been deleted. Refreshing list...');
+          // Remove from local state and refresh with BYPASS CACHE
+          setEmployees(prev => prev.filter(emp => emp._id !== id));
+          await fetchEmployees(true); // ✅ Manual fetch only for error case
+        } else {
+          alert('Error: ' + err.message);
+        }
       } finally {
         setLoading(false);
       }
@@ -465,6 +540,104 @@ const handleFingerprintEnrollment = async () => {
     setEditingEmployee(null);
     setFingerprintStep(0);
     setIsEnrollingFingerprint(false);
+    setShowReEnrollSection(false); // Reset re-enrollment section
+    setCapturedFingerprintTemplate(null); // Clear captured template
+  };
+
+  // === RE-ENROLLMENT HANDLER (For Edit Mode) ===
+  const handleReEnrollFingerprint = async () => {
+    if (!editingEmployee) {
+      toast.error('No employee selected for re-enrollment');
+      return;
+    }
+
+    // Check enrollment count limit
+    if (editingEmployee.fingerprintEnrollmentCount >= 3) {
+      toast.error('Maximum fingerprint enrollment limit (3) reached for this employee');
+      return;
+    }
+
+    // Confirm re-enrollment
+    const confirmed = window.confirm(
+      `Re-enroll fingerprint for ${editingEmployee.firstName} ${editingEmployee.lastName}?\n\n` +
+      `Current enrollments: ${editingEmployee.fingerprintEnrollmentCount || 0}/3\n\n` +
+      `This will replace the existing fingerprint template.`
+    );
+
+    if (!confirmed) return;
+
+    setShowReEnrollSection(true);
+    setFingerprintStep(0);
+    setCapturedFingerprintTemplate(null);
+    
+    // Start fingerprint enrollment process
+    await handleFingerprintEnrollment();
+  };
+
+  // === SUBMIT RE-ENROLLMENT (Update existing employee with new fingerprint) ===
+  const handleSubmitReEnrollment = async () => {
+    if (!capturedFingerprintTemplate) {
+      toast.error('No fingerprint captured. Please enroll fingerprint first.');
+      return;
+    }
+
+    if (!editingEmployee) {
+      toast.error('No employee selected');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      logger.log('🔄 Submitting fingerprint re-enrollment for:', editingEmployee.employeeId);
+      
+      // Send only the fingerprint template to the backend
+      const response = await employeeApi.update(editingEmployee._id, {
+        fingerprintTemplate: capturedFingerprintTemplate,
+        fingerprintEnrolled: true
+      });
+
+      logger.log('✅ Re-enrollment response:', response);
+
+      // ✅ CRITICAL FIX: Update local state immediately
+      const updatedEmployee = response.data || response;
+      setEmployees(prevEmployees => 
+        prevEmployees.map(emp => 
+          emp._id === editingEmployee._id 
+            ? { ...emp, ...updatedEmployee, fingerprintEnrolled: true } 
+            : emp
+        )
+      );
+      
+      // Update editing employee state to reflect changes in modal
+      setEditingEmployee(prev => ({
+        ...prev,
+        ...updatedEmployee,
+        fingerprintEnrolled: true
+      }));
+
+      toast.success(`Fingerprint re-enrolled successfully for ${editingEmployee.firstName} ${editingEmployee.lastName}!`);
+      
+      // Update local form state
+      setFormData(prev => ({
+        ...prev,
+        fingerprintEnrolled: true
+      }));
+
+      // Reset re-enrollment section
+      setShowReEnrollSection(false);
+      setFingerprintStep(0);
+      setCapturedFingerprintTemplate(null);
+
+      // Refresh employee list to ensure consistency
+      await fetchEmployees(true);
+      
+    } catch (error) {
+      logger.error('❌ Re-enrollment error:', error);
+      toast.error(error.message || 'Failed to re-enroll fingerprint');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRegenerateCredentials = () => {
@@ -497,20 +670,46 @@ const handleFingerprintEnrollment = async () => {
 
   return (
     <div className="d-flex" style={{ minHeight: '100vh', background: '#f8f9fb' }}>
-      {/* Use Unified Admin Sidebar */}
-      <AdminSidebar />
-
-      {/* Main Content - ADD MARGIN LEFT TO ACCOMMODATE FIXED SIDEBAR */}
-      <div 
-        className="flex-1 overflow-auto" 
-        style={{ 
-          marginLeft: 280,
-          minHeight: '100vh'
-        }}
+      {/* Hamburger Menu Button for Mobile/Tablet */}
+      <button
+        className="hamburger-menu-button"
+        onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+        aria-label="Toggle navigation menu"
       >
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+
+      {/* Mobile Sidebar Overlay */}
+      {isMobileSidebarOpen && (
+        <div 
+          className="mobile-sidebar-overlay"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
+      {/* Use Unified Admin Sidebar */}
+      <AdminSidebar isMobileOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
+
+      {/* Main Content Wrapper */}
+      <div className="admin-main-content">
         {/* Use Unified Admin Header */}
         <AdminHeader />
         
+        {/* Content Area */}
+        <div className="admin-content-area">
         <div className="p-4">
           <div className="card shadow-sm" style={{ borderRadius: '15px', border: 'none' }}>
             <div className="card-header" style={{ borderRadius: '0', padding: '20px', background: 'transparent' }}>
@@ -608,7 +807,8 @@ const handleFingerprintEnrollment = async () => {
             </div>
           </div>
         </div>
-      </div>
+      </div> {/* Close admin-content-area */}
+      </div> {/* Close admin-main-content */}
 
       {/* Add Employee Modal */}
       {showAddForm && (
@@ -942,6 +1142,80 @@ const handleFingerprintEnrollment = async () => {
                         {formData.fingerprintEnrolled ? 'Enrolled' : 'Not Enrolled'}
                       </div>
                     </div>
+
+                    {/* Re-Enroll Fingerprint Button (Only in Edit Mode) */}
+                    <div className="col-md-6">
+                      <label className="form-label">Fingerprint Actions</label>
+                      <button
+                        type="button"
+                        className="btn btn-warning w-100"
+                        onClick={handleReEnrollFingerprint}
+                        disabled={isEnrollingFingerprint}
+                      >
+                        <i className="fas fa-fingerprint me-2"></i>
+                        {formData.fingerprintEnrolled ? 'Re-Enroll Fingerprint' : 'Enroll Fingerprint'}
+                      </button>
+                      {editingEmployee?.fingerprintEnrollmentCount > 0 && (
+                        <small className="text-muted d-block mt-1">
+                          Enrollments: {editingEmployee.fingerprintEnrollmentCount}/3
+                        </small>
+                      )}
+                    </div>
+
+                    {/* Re-Enrollment Section (Shown when re-enrolling) */}
+                    {showReEnrollSection && (
+                      <div className="col-12 mt-3">
+                        <div className="card border-primary">
+                          <div className="card-header bg-primary text-white">
+                            <h6 className="mb-0">
+                              <i className="fas fa-fingerprint me-2"></i>
+                              Fingerprint Re-Enrollment
+                            </h6>
+                          </div>
+                          <div className="card-body text-center">
+                            {fingerprintStep === 0 && (
+                              <div className="alert alert-info">
+                                <i className="fas fa-info-circle me-2"></i>
+                                Place your finger on the scanner to begin enrollment.
+                              </div>
+                            )}
+                            {fingerprintStep === 1 && (
+                              <div className="alert alert-warning">
+                                <div className="spinner-border text-warning me-2" role="status"></div>
+                                <strong>Scanning fingerprint...</strong>
+                                <p className="mb-0 mt-2">Please keep your finger on the scanner</p>
+                              </div>
+                            )}
+                            {fingerprintStep === 2 && capturedFingerprintTemplate && (
+                              <>
+                                <div className="alert alert-success">
+                                  <i className="fas fa-check-circle me-2"></i>
+                                  <strong>Fingerprint captured successfully!</strong>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-success btn-lg"
+                                  onClick={handleSubmitReEnrollment}
+                                  disabled={loading}
+                                >
+                                  {loading ? (
+                                    <>
+                                      <span className="spinner-border spinner-border-sm me-2"></span>
+                                      Saving...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="fas fa-save me-2"></i>
+                                      Save New Fingerprint
+                                    </>
+                                  )}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Credentials - ALL READONLY in edit mode */}
                     <div className="col-12">

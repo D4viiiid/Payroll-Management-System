@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
+import { logger } from '../utils/logger.js';
 import notifSound from '../assets/notif.mp3';
 
 /**
@@ -24,12 +25,19 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
       setDeviceStatus('checking');
       const response = await fetch('/api/biometric-integrated/device/health');
       const data = await response.json();
+      // Save optional message for UI
+      if (data && data.message) {
+        setDeviceMessage(data.message);
+      } else {
+        setDeviceMessage('');
+      }
       setDeviceStatus(data.connected ? 'connected' : 'disconnected');
     } catch (error) {
       logger.error('Error checking device:', error);
       setDeviceStatus('disconnected');
     }
   };
+  const [deviceMessage, setDeviceMessage] = useState('');
 
   const loadCurrentUserAttendance = () => {
     try {
@@ -76,6 +84,12 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
         const action = data.action === 'time_in' ? 'Time In' : 'Time Out';
         toast.success(`✅ ${action} recorded successfully!`, {
           autoClose: 3000
+        });
+
+        // ✅ FIX ISSUE #1: Emit event to update dashboard immediately
+        // Import eventBus dynamically to avoid circular dependencies
+        import('../services/apiService').then(({ eventBus }) => {
+          eventBus.emit('attendance-recorded', data);
         });
 
         // Show attendance details
@@ -136,6 +150,7 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
                   {deviceStatus === 'checking' && 'Checking connection...'}
                   {deviceStatus === 'connected' && 'Ready to scan'}
                   {deviceStatus === 'disconnected' && 'Not connected'}
+                  {deviceMessage && ` — ${deviceMessage}`}
                 </p>
               </div>
             </div>

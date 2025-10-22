@@ -47,7 +47,22 @@ const handleApiError = (error, customMessage = 'An error occurred') => {
 // Generic fetch function with error handling
 const fetchApi = async (url, options = {}) => {
   try {
-    const response = await fetch(url, options);
+    // ✅ CRITICAL FIX: Add cache-busting headers to prevent browser HTTP caching
+    const defaultHeaders = {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    };
+    
+    const mergedOptions = {
+      ...options,
+      headers: {
+        ...defaultHeaders,
+        ...options.headers
+      }
+    };
+    
+    const response = await fetch(url, mergedOptions);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -62,11 +77,32 @@ const fetchApi = async (url, options = {}) => {
 
 // Employee API functions
 export const employeeApi = {
-  // Get all employees with pagination support
+  // Get all employees with pagination
   getAll: async (params = {}) => {
-    const { page = 1, limit = 50 } = params;
-    const cacheKey = createCacheKey(`${BACKEND_API_URL}/employees`, { page, limit });
+    const { page = 1, limit = 50, bypassCache = false } = params;
     
+    // ✅ CRITICAL FIX: Add timestamp to URL to bust browser HTTP cache
+    const timestamp = Date.now();
+    const cacheKey = createCacheKey(`${BACKEND_API_URL}/employees`, { page, limit, _t: timestamp });
+    
+    console.log(`🔍 employeeApi.getAll: Called with bypassCache=${bypassCache}, cacheKey=${cacheKey}`);
+    
+    // ✅ FIX: If bypassCache is true, clear cache first and don't use deduplication
+    if (bypassCache) {
+      console.log('⚡ employeeApi.getAll: Bypassing cache, clearing and fetching fresh data');
+      requestDeduplicator.clearAll(); // Clear all to be safe
+      const data = await fetchApi(`${cacheKey}`);
+      if (!data.error) {
+        console.log('✅ employeeApi.getAll: Fresh data fetched, emitting employees-updated event');
+        eventBus.emit('employees-updated', data);
+      } else {
+        console.error('❌ employeeApi.getAll: Error fetching data:', data.error);
+      }
+      console.log('✅ employeeApi.getAll: Fresh data fetched (bypassed cache), returning', Array.isArray(data) ? data.length : (data.data?.length || 0), 'employees');
+      return data;
+    }
+    
+    console.log('🔄 employeeApi.getAll: Using dedupe with cache');
     const fetchFn = async () => {
       return await fetchApi(`${cacheKey}`);
     };
@@ -74,8 +110,10 @@ export const employeeApi = {
     const data = await requestDeduplicator.dedupe(cacheKey, fetchFn, 10000);
     
     if (!data.error) {
+      console.log('✅ employeeApi.getAll: Data fetched from cache/fresh, emitting employees-updated event');
       eventBus.emit('employees-updated', data);
     }
+    console.log('✅ employeeApi.getAll: Returning', Array.isArray(data) ? data.length : (data.data?.length || 0), 'employees');
     return data;
   },
   
@@ -86,6 +124,7 @@ export const employeeApi = {
   
   // Create new employee
   create: async (employeeData) => {
+    console.log('🚀 apiService.create: Starting employee creation...', employeeData);
     const data = await fetchApi(`${BACKEND_API_URL}/employees`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -93,10 +132,27 @@ export const employeeApi = {
     });
     
     if (!data.error) {
-      // Notify all components about the new employee
+      // ✅ CRITICAL FIX: Clear ALL possible employee list cache variations
+      requestDeduplicator.clearAll(); // Clear everything to be safe
+      
+      console.log('🎯 apiService.create: About to emit employee-created event');
+      console.log('🔥 EVENT BUS STATE:', eventBus.events);
+      
+      // ✅ Emit event BEFORE fetching to ensure components are ready
       eventBus.emit('employee-created', data);
-      // Refresh the employee list
-      employeeApi.getAll();
+      console.log('✅ apiService.create: Event employee-created emitted with data:', data);
+      
+      // ✅ ADDITIONAL: Also trigger a manual refresh via employees-updated event
+      setTimeout(async () => {
+        console.log('⏰ apiService.create: Triggering delayed refresh...');
+        const freshData = await fetchApi(`${BACKEND_API_URL}/employees?page=1&limit=50`);
+        if (!freshData.error) {
+          eventBus.emit('employees-updated', freshData);
+          console.log('✅ apiService.create: Delayed employees-updated event emitted');
+        }
+      }, 100);
+    } else {
+      console.error('❌ apiService.create: Error creating employee:', data.error);
     }
     
     return data;
@@ -111,10 +167,11 @@ export const employeeApi = {
     });
     
     if (!data.error) {
-      // Notify all components about the updated employee
+      // ✅ CRITICAL FIX: Clear ALL possible employee list cache variations
+      requestDeduplicator.clearAll(); // Clear everything to be safe
+      
+      // ✅ Emit event BEFORE fetching to ensure components are ready
       eventBus.emit('employee-updated', data);
-      // Refresh the employee list
-      employeeApi.getAll();
     }
     
     return data;
@@ -122,15 +179,33 @@ export const employeeApi = {
   
   // Delete employee
   delete: async (id) => {
+    console.log('🗑️ apiService.delete: Starting employee deletion for ID:', id);
     const data = await fetchApi(`${BACKEND_API_URL}/employees/${id}`, {
       method: 'DELETE'
     });
 
     if (!data.error) {
-      // Notify all components about the deleted employee
+      // ✅ CRITICAL FIX: Clear ALL possible employee list cache variations
+      requestDeduplicator.clearAll(); // Clear everything to be safe
+      
+      console.log('🎯 apiService.delete: About to emit employee-deleted event for ID:', id);
+      console.log('🔥 EVENT BUS STATE:', eventBus.events);
+      
+      // ✅ Emit event BEFORE fetching to ensure components are ready
       eventBus.emit('employee-deleted', { id });
-      // Refresh the employee list
-      employeeApi.getAll();
+      console.log('✅ apiService.delete: Event employee-deleted emitted for ID:', id);
+      
+      // ✅ ADDITIONAL: Also trigger a manual refresh via employees-updated event
+      setTimeout(async () => {
+        console.log('⏰ apiService.delete: Triggering delayed refresh...');
+        const freshData = await fetchApi(`${BACKEND_API_URL}/employees?page=1&limit=50`);
+        if (!freshData.error) {
+          eventBus.emit('employees-updated', freshData);
+          console.log('✅ apiService.delete: Delayed employees-updated event emitted');
+        }
+      }, 100);
+    } else {
+      console.error('❌ apiService.delete: Error deleting employee:', data.error);
     }
 
     return data;
@@ -174,8 +249,19 @@ export const employeeApi = {
 export const attendanceApi = {
   // Get all attendance records
   getAll: async (params = {}) => {
-    const { page = 1, limit = 50 } = params;
+    const { page = 1, limit = 50, bypassCache = false } = params;
     const cacheKey = createCacheKey(`${BACKEND_API_URL}/attendance`, { page, limit });
+    
+    // ✅ FIX: If bypassCache is true, clear cache first and don't use deduplication
+    if (bypassCache) {
+      requestDeduplicator.clear(cacheKey);
+      const data = await fetchApi(`${BACKEND_API_URL}/attendance?page=${page}&limit=${limit}`);
+      if (!data.error) {
+        eventBus.emit('attendance-updated', data);
+      }
+      return data;
+    }
+    
     const fetchFn = async () => await fetchApi(`${BACKEND_API_URL}/attendance?page=${page}&limit=${limit}`);
     const data = await requestDeduplicator.dedupe(cacheKey, fetchFn, 10000);
     if (!data.error) {
@@ -207,10 +293,11 @@ export const attendanceApi = {
     });
     
     if (!data.error) {
-      // Notify all components about the new attendance record
+      // ✅ CRITICAL FIX: Clear ALL attendance cache variations
+      requestDeduplicator.clearAll(); // Clear everything to be safe
+      
+      // ✅ Emit event BEFORE fetching to ensure components are ready
       eventBus.emit('attendance-recorded', data);
-      // Refresh the attendance list
-      attendanceApi.getAll();
     }
     
     return data;
@@ -221,8 +308,19 @@ export const attendanceApi = {
 export const salaryApi = {
   // Get all salaries
   getAll: async (params = {}) => {
-    const { page = 1, limit = 50 } = params;
+    const { page = 1, limit = 50, bypassCache = false } = params;
     const cacheKey = createCacheKey(`${BACKEND_API_URL}/salary`, { page, limit });
+    
+    // ✅ FIX: If bypassCache is true, clear cache first and don't use deduplication
+    if (bypassCache) {
+      requestDeduplicator.clear(cacheKey);
+      const data = await fetchApi(`${BACKEND_API_URL}/salary?page=${page}&limit=${limit}`);
+      if (!data.error) {
+        eventBus.emit('salaries-updated', data);
+      }
+      return data;
+    }
+    
     const fetchFn = async () => await fetchApi(`${BACKEND_API_URL}/salary?page=${page}&limit=${limit}`);
     const data = await requestDeduplicator.dedupe(cacheKey, fetchFn, 10000);
     if (!data.error) {
@@ -240,8 +338,11 @@ export const salaryApi = {
     });
 
     if (!data.error) {
+      // ✅ CRITICAL FIX: Clear ALL salary cache variations
+      requestDeduplicator.clearAll(); // Clear everything to be safe
+      
+      // ✅ Emit event BEFORE fetching to ensure components are ready
       eventBus.emit('salary-created', data);
-      salaryApi.getAll();
     }
 
     return data;
@@ -256,8 +357,11 @@ export const salaryApi = {
     });
 
     if (!data.error) {
+      // ✅ CRITICAL FIX: Clear ALL salary cache variations
+      requestDeduplicator.clearAll(); // Clear everything to be safe
+      
+      // ✅ Emit event BEFORE fetching to ensure components are ready
       eventBus.emit('salary-updated', data);
-      salaryApi.getAll();
     }
 
     return data;
@@ -272,8 +376,11 @@ export const salaryApi = {
     });
 
     if (!data.error) {
+      // ✅ CRITICAL FIX: Clear ALL salary cache variations
+      requestDeduplicator.clearAll(); // Clear everything to be safe
+      
+      // ✅ Emit event BEFORE fetching to ensure components are ready
       eventBus.emit('salary-archived', { id });
-      salaryApi.getAll();
     }
 
     return data;
@@ -288,8 +395,11 @@ export const salaryApi = {
     });
 
     if (!data.error) {
+      // ✅ CRITICAL FIX: Clear ALL salary cache variations
+      requestDeduplicator.clearAll(); // Clear everything to be safe
+      
+      // ✅ Emit event BEFORE fetching to ensure components are ready
       eventBus.emit('salary-restored', { id });
-      salaryApi.getAll();
     }
 
     return data;
@@ -356,12 +466,12 @@ export const startRealTimeUpdates = (intervalMs = 10000) => {
     clearInterval(pollingInterval);
   }
   
-  // Initial fetch
-  employeeApi.getAll();
+  // ✅ FIX: Initial fetch with cache bypass to get fresh data
+  employeeApi.getAll({ bypassCache: true });
   
-  // Set up polling
+  // ✅ FIX: Set up polling with cache bypass to always get fresh data
   pollingInterval = setInterval(() => {
-    employeeApi.getAll();
+    employeeApi.getAll({ bypassCache: true });
   }, intervalMs);
   
   return () => {

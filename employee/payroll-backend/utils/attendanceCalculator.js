@@ -16,11 +16,14 @@ const TIMEZONE = 'Asia/Manila';
 // Time constants
 const FULL_DAY_CUTOFF = { hour: 9, minute: 30 }; // 9:30 AM
 const WORK_DAY_START = { hour: 8, minute: 0 };   // 8:00 AM
-const WORK_DAY_END = { hour: 17, minute: 0 };    // 5:00 PM
+const WORK_DAY_END = { hour: 17, minute: 0 };    // 5:00 PM (overtime starts after this)
+const MAX_TIME_OUT = { hour: 20, minute: 0 };    // 8:00 PM (max time out, auto time-out)
 const LUNCH_START = { hour: 12, minute: 0 };     // 12:00 PM
 const LUNCH_END = { hour: 13, minute: 0 };       // 1:00 PM
 const HALF_DAY_MINIMUM_HOURS = 4;                // Minimum 4 hours for half-day
 const FULL_DAY_HOURS = 8;                        // Expected hours for full day
+const OVERTIME_ELIGIBLE_HOURS = 6.5;             // ✅ FIX ISSUE #2: Minimum 6.5 hours to be eligible for overtime pay
+const LATEST_TIME_IN = { hour: 17, minute: 0 };  // ✅ FIX ISSUE #2: Cannot time-in after 5:00 PM
 
 /**
  * Parse time string to moment object
@@ -89,6 +92,11 @@ const determineTimeInStatus = (timeIn) => {
 
 /**
  * Determine day type based on time-in and hours worked
+ * ✅ UPDATED: Now based on ACTUAL HOURS WORKED, not just time-in status
+ * - Invalid: < 4 hours (no pay)
+ * - Half Day: 4 to <6.5 hours (variable pay)
+ * - Full Day: 6.5 to 8 hours from standard shift (full day pay)
+ * - Overtime: > 6.5 hours AND past 5PM time-out (full day + OT pay)
  * @param {moment} timeIn - Time-in moment object
  * @param {moment} timeOut - Time-out moment object
  * @returns {Object} { dayType, hoursWorked, timeInStatus, isValid }
@@ -116,44 +124,77 @@ const determineDayType = (timeIn, timeOut) => {
 
   const timeInStatus = determineTimeInStatus(timeIn);
   const hoursWorked = calculateHoursWorked(timeIn, timeOut);
+  const timeOutHour = timeOut.hour();
+  const isAfter5PM = timeOutHour >= 17;
 
-  // If less than 4 hours worked, it's incomplete regardless of time-in
+  // ✅ RULE 1: Less than 4 hours = Invalid (no pay)
   if (hoursWorked < HALF_DAY_MINIMUM_HOURS) {
     return {
-      dayType: 'Incomplete',
+      dayType: 'Invalid',
       hoursWorked: hoursWorked.toFixed(2),
       timeInStatus,
       isValid: false,
-      reason: `Insufficient hours worked (${hoursWorked.toFixed(2)} hours, minimum ${HALF_DAY_MINIMUM_HOURS} required)`
+      reason: `Invalid attendance (${hoursWorked.toFixed(2)} hours, minimum ${HALF_DAY_MINIMUM_HOURS} required)`
     };
   }
 
-  // If came in on time (by 9:30) and worked >= 4 hours
-  if (timeInStatus === 'On Time') {
-    // Full day if >= 8 hours, otherwise still full day credit if on time
+  // ✅ RULE 2: 4 to <6.5 hours = Half Day (variable pay based on actual hours)
+  if (hoursWorked >= HALF_DAY_MINIMUM_HOURS && hoursWorked < OVERTIME_ELIGIBLE_HOURS) {
+    return {
+      dayType: 'Half Day',
+      hoursWorked: hoursWorked.toFixed(2),
+      timeInStatus,
+      isValid: true,
+      reason: `Worked ${hoursWorked.toFixed(2)} hours (4-6.5 hrs range = Half Day with variable pay)`
+    };
+  }
+
+  // ✅ RULE 3 & 4: >= 6.5 hours
+  // If time-in was during grace period (8:00-9:30 AM) AND worked 6.5-8 hours = Full Day
+  // If worked > 6.5 hours AND time-out after 5PM = Overtime
+  if (hoursWorked >= OVERTIME_ELIGIBLE_HOURS) {
+    // Check if they have overtime hours (> 8 hours excluding lunch)
+    const overtimeHours = Math.max(0, hoursWorked - FULL_DAY_HOURS);
+    
+    // If they have overtime hours AND timed out after 5PM = Overtime status
+    if (overtimeHours > 0 && isAfter5PM) {
+      return {
+        dayType: 'Overtime',
+        hoursWorked: hoursWorked.toFixed(2),
+        timeInStatus,
+        isValid: true,
+        reason: `Worked ${hoursWorked.toFixed(2)} hours with ${overtimeHours.toFixed(2)}hrs overtime (after 5PM)`
+      };
+    }
+    
+    // Otherwise, it's a Full Day (6.5-8 hours or overtime but before 5PM)
     return {
       dayType: 'Full Day',
       hoursWorked: hoursWorked.toFixed(2),
-      timeInStatus: 'On Time',
+      timeInStatus,
       isValid: true,
-      reason: 'Arrived on time (by 9:30 AM)'
+      reason: `Worked ${hoursWorked.toFixed(2)} hours (≥6.5 hrs = Full Day)`
     };
   }
 
-  // If came in late (after 9:30) but worked >= 4 hours
+  // Fallback (shouldn't reach here)
   return {
     dayType: 'Half Day',
     hoursWorked: hoursWorked.toFixed(2),
-    timeInStatus: 'Half Day',
+    timeInStatus,
     isValid: true,
-    reason: 'Arrived after 9:30 AM but worked minimum 4 hours'
+    reason: 'Default to Half Day'
   };
 };
 
 /**
  * Calculate salary for a day based on day type and hours worked
- * NEW LOGIC: If Half Day with 4-8 hours worked, pay half-day + hourly rate for extra hours
- * @param {String} dayType - 'Full Day', 'Half Day', or 'Incomplete'
+ * ✅ UPDATED LOGIC:
+ * - Invalid: No pay
+ * - Half Day (4-<6.5 hrs): Half-day base + hourly rate for extra hours
+ * - Full Day (6.5-8 hrs): Full day rate
+ * - Overtime (>6.5 hrs + past 5PM): Full day rate (OT pay calculated separately)
+ * @param {String} dayType - 'Invalid', 'Half Day', 'Full Day', or 'Overtime'
  * @param {Number} dailyRate - Employee's daily salary rate
  * @param {Number} hoursWorked - Actual hours worked (excluding lunch)
  * @returns {Number} Salary amount for the day
@@ -163,18 +204,20 @@ const calculateDaySalary = (dayType, dailyRate, hoursWorked = 0) => {
   const halfDayBase = dailyRate * 0.5; // ₱275
   
   switch (dayType) {
+    case 'Overtime':    // ✅ Overtime gets full day rate (OT pay added separately)
     case 'Full Day':
       return dailyRate;
     case 'Half Day':
-      // If worked more than 4 hours but less than 8 hours
-      if (hoursWorked > HALF_DAY_MINIMUM_HOURS && hoursWorked < FULL_DAY_HOURS) {
+      // Variable pay based on actual hours worked (4 to <6.5 hours)
+      if (hoursWorked >= HALF_DAY_MINIMUM_HOURS && hoursWorked < OVERTIME_ELIGIBLE_HOURS) {
         // Half-day base + hourly rate for additional hours beyond 4
         const extraHours = hoursWorked - HALF_DAY_MINIMUM_HOURS;
         const additionalPay = extraHours * hourlyRate;
         return halfDayBase + additionalPay;
       }
-      // Standard half-day (exactly 4 hours or defaulting to half-day rate)
+      // Standard half-day (exactly 4 hours)
       return halfDayBase;
+    case 'Invalid':     // ✅ Invalid status = no pay
     case 'Incomplete':
     case 'Absent':
     default:
@@ -217,53 +260,63 @@ const validateAndCalculateAttendance = (attendance, employee) => {
   // Calculate overtime
   const overtimeHours = calculateOvertimeHours(timeInMoment, timeOutMoment);
   
-  // ✅ FIX ISSUE #2: Overtime Pay Cap Logic
-  // Overtime pay ONLY applies when:
-  // 1. Employee manually times out (NOT auto-closed)
-  // 2. Timeout is after 5:00 PM
-  // 3. NOT a Full Day employee (capped at ₱550)
+  // ✅ FIX ISSUE #2: Strict Overtime Eligibility Rules
+  // Overtime pay ONLY applies when ALL 4 conditions are met:
+  // 1. Worked > 8 hours total (excluding lunch)
+  // 2. Worked ≥ 6.5 hours (minimum overtime eligibility threshold)
+  // 3. Timed out after 5:00 PM
+  // 4. Employee manually timed out (NOT auto-closed)
+  // 
+  // If ANY condition fails → use REGULAR hourly rate (₱71.25/hr), NOT overtime rate (₱89.06/hr)
   
   const wasAutoClosed = notes && (
     notes.includes('[Auto-closed after') || 
-    notes.includes('[Auto-closed at end of day]')
+    notes.includes('[Auto-closed at end of day]') ||
+    notes.includes('[Auto-closed at 8 PM') ||
+    notes.includes('Auto-closed')
   );
   
-  const timeOutHour = timeOutMoment.hour();
+  const timeOutHour = timeOutMoment ? timeOutMoment.hour() : 0;
   const isAfter5PM = timeOutHour >= 17; // 5:00 PM or later
+  const hoursWorkedNum = parseFloat(dayTypeResult.hoursWorked) || 0;
   
   let overtimePay = 0;
   let overtimeNote = null;
   
-  if (dayTypeResult.dayType === 'Full Day') {
-    // Full Day employees get ₱550 max, no overtime pay
-    overtimePay = 0;
-    if (overtimeHours > 0) {
-      if (wasAutoClosed) {
-        overtimeNote = `Auto-closed after ${overtimeHours.toFixed(2)}hrs overtime. No extra pay for Full Day rate (₱${dailyRate} max)`;
-      } else {
-        overtimeNote = `Worked ${overtimeHours.toFixed(2)}hrs overtime but no extra pay for Full Day rate (₱${dailyRate} max)`;
-      }
-    }
-  } else if (wasAutoClosed) {
-    // Auto-closed shifts get NO overtime pay (system timeout at 12 hours)
-    overtimePay = 0;
-    if (overtimeHours > 0) {
-      overtimeNote = `Auto-closed after ${overtimeHours.toFixed(2)}hrs. No overtime pay for automatic timeout`;
-    }
-  } else if (isAfter5PM && overtimeHours > 0) {
-    // Manual timeout after 5 PM - eligible for overtime pay
+  // Check ALL 4 conditions for overtime eligibility
+  const condition1_moreThan8Hours = overtimeHours > 0; // > 8 hours total
+  const condition2_atLeast6_5Hours = hoursWorkedNum >= OVERTIME_ELIGIBLE_HOURS; // ≥ 6.5 hours
+  const condition3_after5PM = isAfter5PM; // Timed out after 5 PM
+  const condition4_manualTimeout = !wasAutoClosed; // Not auto-closed
+  
+  const isOTEligible = condition1_moreThan8Hours && 
+                       condition2_atLeast6_5Hours && 
+                       condition3_after5PM && 
+                       condition4_manualTimeout;
+  
+  if (isOTEligible) {
+    // ✅ ELIGIBLE: All 4 conditions met → Apply OT rate (₱89.0625/hr)
     overtimePay = overtimeHours * overtimeRate;
-    overtimeNote = `Manual timeout after 5 PM: ${overtimeHours.toFixed(2)}hrs × ₱${overtimeRate} = ₱${overtimePay.toFixed(2)}`;
+    overtimeNote = `✅ OT ELIGIBLE: Worked ${hoursWorkedNum}hrs (>${FULL_DAY_HOURS}hrs), timed out at ${timeOutMoment.format('h:mm A')} (after 5PM), manual timeout. OT Pay: ${overtimeHours.toFixed(2)}hrs × ₱${overtimeRate} = ₱${overtimePay.toFixed(2)}`;
   } else {
-    // Manual timeout before 5 PM - no overtime pay
+    // ❌ NOT ELIGIBLE: At least one condition failed → Regular hourly rate for extra hours
     overtimePay = 0;
-    if (overtimeHours > 0) {
-      overtimeNote = `Timeout before 5 PM (${timeOutMoment.format('h:mm A')}). No overtime pay`;
-    }
+    
+    // Build detailed explanation of why not eligible
+    const reasons = [];
+    if (!condition1_moreThan8Hours) reasons.push(`only ${hoursWorkedNum}hrs worked (need >8hrs)`);
+    if (!condition2_atLeast6_5Hours) reasons.push(`only ${hoursWorkedNum}hrs worked (need ≥6.5hrs)`);
+    if (!condition3_after5PM) reasons.push(`timed out before 5PM`);
+    if (!condition4_manualTimeout) reasons.push(`auto-closed timeout`);
+    
+    overtimeNote = `❌ NOT OT ELIGIBLE: ${reasons.join(', ')}. ${
+      hoursWorkedNum > HALF_DAY_MINIMUM_HOURS 
+        ? `Variable pay at regular hourly rate (₱${(dailyRate / 8).toFixed(2)}/hr).`
+        : 'Insufficient hours for pay.'
+    }`;
   }
 
   // Calculate day salary (now includes hourly rate logic for partial days)
-  const hoursWorkedNum = parseFloat(dayTypeResult.hoursWorked) || 0;
   const daySalary = calculateDaySalary(dayTypeResult.dayType, dailyRate, hoursWorkedNum);
 
   return {
@@ -290,7 +343,9 @@ const validateAndCalculateAttendance = (attendance, employee) => {
 const calculateAttendanceSummary = (attendanceRecords, employee) => {
   let totalFullDays = 0;
   let totalHalfDays = 0;
+  let totalOvertimeDays = 0;   // ✅ NEW: Count overtime days
   let totalIncompleteDays = 0;
+  let totalInvalidDays = 0;    // ✅ FIX ISSUE #2: Count invalid days
   let totalAbsentDays = 0;
   let totalHoursWorked = 0;
   let totalOvertimeHours = 0;
@@ -307,6 +362,12 @@ const calculateAttendanceSummary = (attendanceRecords, employee) => {
         break;
       case 'Half Day':
         totalHalfDays++;
+        break;
+      case 'Overtime':       // ✅ NEW: Count overtime days
+        totalOvertimeDays++;
+        break;
+      case 'Invalid':        // ✅ FIX ISSUE #2: Count invalid days
+        totalInvalidDays++;
         break;
       case 'Incomplete':
         totalIncompleteDays++;
@@ -334,7 +395,9 @@ const calculateAttendanceSummary = (attendanceRecords, employee) => {
       totalDays: attendanceRecords.length,
       fullDays: totalFullDays,
       halfDays: totalHalfDays,
+      overtimeDays: totalOvertimeDays,    // ✅ NEW: Include overtime days count
       incompleteDays: totalIncompleteDays,
+      invalidDays: totalInvalidDays,      // ✅ FIX ISSUE #2: Include invalid days in summary
       absentDays: totalAbsentDays,
       totalHoursWorked: totalHoursWorked.toFixed(2),
       totalOvertimeHours: totalOvertimeHours.toFixed(2),
@@ -360,6 +423,22 @@ const validateTimeInRealTime = (timeIn, date) => {
       status: 'Error',
       message: 'Invalid time format',
       dayType: 'Incomplete'
+    };
+  }
+
+  // ✅ FIX ISSUE #2: Cannot time-in after 5:00 PM
+  const latestTimeIn = timeInMoment.clone()
+    .hour(LATEST_TIME_IN.hour)
+    .minute(LATEST_TIME_IN.minute)
+    .second(0);
+  
+  if (timeInMoment.isAfter(latestTimeIn)) {
+    return {
+      isValid: false,
+      status: 'Error',
+      message: '❌ Time-in not allowed after 5:00 PM. Please contact your supervisor.',
+      dayType: 'Invalid',
+      expectedPay: 'No pay'
     };
   }
 
@@ -400,6 +479,9 @@ export const CONSTANTS = {
   FULL_DAY_CUTOFF,
   HALF_DAY_MINIMUM_HOURS,
   FULL_DAY_HOURS,
+  OVERTIME_ELIGIBLE_HOURS,  // ✅ FIX ISSUE #2: Export new constant
+  LATEST_TIME_IN,           // ✅ FIX ISSUE #2: Export new constant
+  MAX_TIME_OUT,             // ✅ FIX ISSUE #2: Export new constant
   LUNCH_START,
   LUNCH_END,
   TIMEZONE

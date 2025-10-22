@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import apiService, { eventBus, startRealTimeUpdates, stopRealTimeUpdates } from '../services/apiService';
 import BiometricEnrollmentSection from './BiometricEnrollmentSection';
+import { logger } from '../utils/logger';
+import './Admin.responsive.css';
 
 const Employees = () => {
   const [employees, setEmployees] = useState([]);
@@ -20,6 +22,7 @@ const Employees = () => {
   const [enrollmentCredentials, setEnrollmentCredentials] = useState({ email: '', password: '' });
   const [editingEmployee, setEditingEmployee] = useState(null); // Track employee being edited
   const [showBiometricSection, setShowBiometricSection] = useState(false); // Show biometric section
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // Mobile sidebar state
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -59,9 +62,11 @@ const Employees = () => {
     }
   };
 
-  const fetchEmployees = async () => {
+  // ✅ FIX: Use useCallback to prevent stale closures in event listeners
+  const fetchEmployees = useCallback(async () => {
     try {
-      const data = await apiService.employee.getAll();
+      // ✅ FIX: Always bypass cache to get fresh data
+      const data = await apiService.employee.getAll({ bypassCache: true });
       if (!data.error) {
         // Handle both paginated response {data: []} and plain array []
         const employeeList = Array.isArray(data) ? data : (data.data || data.employees || []);
@@ -71,27 +76,48 @@ const Employees = () => {
     } catch (error) {
       logger.error('Error fetching employees:', error);
     }
-  };
+  }, []); // Empty deps because it doesn't depend on any props or state
   
   // Set up real-time updates using the centralized API service
   useEffect(() => {
     // Start real-time updates
     const stopUpdates = startRealTimeUpdates(5000); // Update every 5 seconds
     
-    // Listen for employee data updates
-    const unsubscribe = eventBus.on('employees-updated', (data) => {
+    // ✅ FIX: Listen for ALL employee events for immediate updates
+    const unsubscribeUpdated = eventBus.on('employees-updated', (data) => {
       // Handle both paginated response {data: []} and plain array []
       const employeeList = Array.isArray(data) ? data : (data.data || data.employees || []);
       setEmployees(employeeList);
       logger.log('🔄 Employee data updated via event bus');
     });
     
+    // ✅ NEW: Listen for employee creation event
+    const unsubscribeCreated = eventBus.on('employee-created', () => {
+      logger.log('🎉 Employee created event received, refreshing data immediately...');
+      fetchEmployees(); // Immediately fetch fresh data
+    });
+    
+    // ✅ NEW: Listen for employee update event
+    const unsubscribeUpdatedSingle = eventBus.on('employee-updated', () => {
+      logger.log('🔄 Employee updated event received, refreshing data immediately...');
+      fetchEmployees(); // Immediately fetch fresh data
+    });
+    
+    // ✅ NEW: Listen for employee deletion event
+    const unsubscribeDeleted = eventBus.on('employee-deleted', () => {
+      logger.log('🗑️ Employee deleted event received, refreshing data immediately...');
+      fetchEmployees(); // Immediately fetch fresh data
+    });
+    
     // Clean up on component unmount
     return () => {
       stopUpdates();
-      unsubscribe();
+      unsubscribeUpdated();
+      unsubscribeCreated();
+      unsubscribeUpdatedSingle();
+      unsubscribeDeleted();
     };
-  }, []);
+  }, [fetchEmployees]); // ✅ FIX: Add fetchEmployees as dependency
 
   const handleDeleteClick = (employee) => {
     setEmployeeToDelete(employee);
@@ -100,17 +126,15 @@ const Employees = () => {
 
   const handleDeleteConfirm = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${API_URL}/employees/${employeeToDelete._id}`, {
-        method: 'DELETE',
-      });
+      // ✅ FIX: Use centralized API service for deletion to trigger events
+      const result = await apiService.employee.delete(employeeToDelete._id);
 
-      if (!response.ok) {
-        throw new Error('Failed to delete employee');
+      if (result.error) {
+        throw new Error(result.error);
       }
 
-      // Remove the employee from the list
-      setEmployees(employees.filter(emp => emp._id !== employeeToDelete._id));
+      // ✅ FIX: The event listener will automatically refresh the data
+      // No need to manually update state here
       setShowDeleteConfirm(false);
       setEmployeeToDelete(null);
       alert('Employee deleted successfully!');
@@ -445,57 +469,114 @@ const Employees = () => {
   };
 
   return (
-    <div className="d-flex" style={{ minHeight: '100vh', background: '#f8f9fb' }}>
-      <AdminSidebar />
-      
-      <div className="flex-1 overflow-auto" style={{ marginLeft: 280 }}>
+    <div className="admin-page-wrapper">
+      {/* Mobile Hamburger Menu */}
+      <button
+        className="hamburger-menu-button"
+        onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+        aria-label="Toggle Menu"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      {/* Mobile Sidebar Overlay */}
+      <div 
+        className={`mobile-sidebar-overlay ${isMobileSidebarOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileSidebarOpen(false)}
+      />
+
+      {/* Admin Sidebar */}
+      <AdminSidebar isMobileOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
+
+      {/* Main Content Area */}
+      <div className="admin-main-content">
+        {/* Desktop Header */}
         <AdminHeader />
         
-        <div className="p-4">
-          <div className="bg-white p-6 rounded-xl shadow mb-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Employee Management</h1>
+        {/* Content Area with consistent padding */}
+        <div className="admin-content-area">
+          <div className="employee-content-card">
+        <div className="employee-header-section">
+          <h1 className="employee-title">Employee Management</h1>
           <button
             onClick={handleAddEmployeeClick}
-            className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 font-semibold text-lg flex items-center gap-2"
+            className="add-employee-btn"
           >
             <span>+</span> Add Employee
           </button>
         </div>
         
         {/* Service Status */}
-        <div className="mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-700">Fingerprint Service:</span>
+        <div className="service-status-mobile">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 500 }}>Fingerprint Service:</span>
             {fingerprintServiceStatus === 'checking' && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-yellow-600 mr-1"></div>
+              <span style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                padding: '0.25rem 0.75rem', 
+                borderRadius: '9999px', 
+                fontSize: '0.75rem', 
+                fontWeight: 500, 
+                background: '#fef3c7', 
+                color: '#92400e' 
+              }}>
+                <div style={{ 
+                  animation: 'spin 1s linear infinite', 
+                  borderRadius: '50%', 
+                  width: '0.75rem', 
+                  height: '0.75rem', 
+                  borderWidth: '2px', 
+                  borderStyle: 'solid', 
+                  borderColor: '#92400e transparent transparent transparent', 
+                  marginRight: '0.25rem' 
+                }}></div>
                 Checking...
               </span>
             )}
             {fingerprintServiceStatus === 'available' && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              <span style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                padding: '0.25rem 0.75rem', 
+                borderRadius: '9999px', 
+                fontSize: '0.75rem', 
+                fontWeight: 500, 
+                background: '#d1fae5', 
+                color: '#065f46' 
+              }}>
                 ✅ Available
               </span>
             )}
             {fingerprintServiceStatus === 'unavailable' && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+              <span style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                padding: '0.25rem 0.75rem', 
+                borderRadius: '9999px', 
+                fontSize: '0.75rem', 
+                fontWeight: 500, 
+                background: '#fee2e2', 
+                color: '#991b1b' 
+              }}>
                 ❌ Unavailable
               </span>
             )}
             <button
               onClick={checkServiceStatus}
-              className="text-xs text-blue-600 hover:text-blue-800 underline"
+              style={{ fontSize: '0.75rem', color: '#2563eb', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
             >
               Refresh
             </button>
           </div>
           {fingerprintServiceStatus === 'unavailable' && (
-            <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800">
-                <strong>Fingerprint service is not available.</strong> Please make sure:
+            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: '8px' }}>
+              <p style={{ fontSize: '0.875rem', color: '#991b1b', fontWeight: 600 }}>
+                Fingerprint service is not available.
               </p>
-              <ul className="text-xs text-red-700 mt-1 ml-4 list-disc">
+              <ul style={{ fontSize: '0.75rem', color: '#991b1b', marginTop: '0.25rem', marginLeft: '1rem', listStyle: 'disc' }}>
                 <li>Backend server is running (port 5000)</li>
                 <li>Python fingerprint app is running</li>
                 <li>Fingerprint scanner is connected</li>
@@ -506,10 +587,19 @@ const Employees = () => {
 
         {/* Enrollment Status */}
         {enrollmentStatus && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
-              <span className="text-blue-800 font-medium">{enrollmentStatus}</span>
+          <div style={{ background: '#dbeafe', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ 
+                animation: 'spin 1s linear infinite', 
+                borderRadius: '50%', 
+                width: '1rem', 
+                height: '1rem', 
+                borderWidth: '2px', 
+                borderStyle: 'solid', 
+                borderColor: '#2563eb transparent transparent transparent', 
+                marginRight: '0.75rem' 
+              }}></div>
+              <span style={{ color: '#1e40af', fontWeight: 500 }}>{enrollmentStatus}</span>
             </div>
           </div>
         )}
@@ -555,32 +645,32 @@ const Employees = () => {
         )}
         
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full table-auto border-collapse">
-            <thead className="bg-gray-100">
+        <div className="table-responsive-wrapper">
+          <table className="employee-table">
+            <thead>
               <tr>
-                <th className="p-3 text-left font-semibold">#</th>
-                <th className="p-3 text-left font-semibold">Name</th>
-                <th className="p-3 text-left font-semibold">Email</th>
-                <th className="p-3 text-left font-semibold">Employee ID</th>
-                <th className="p-3 text-left font-semibold">Position</th>
-                <th className="p-3 text-left font-semibold">Salary</th>
-                <th className="p-3 text-left font-semibold">Hire Date</th>
-                <th className="p-3 text-left font-semibold">Fingerprint</th>
-                <th className="p-3 text-left font-semibold">Actions</th>
+                <th>#</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Employee ID</th>
+                <th>Position</th>
+                <th>Salary</th>
+                <th>Hire Date</th>
+                <th>Fingerprint</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {employees.map((employee, index) => (
-                <tr key={employee._id} className="border-b hover:bg-gray-50">
-                  <td className="p-3">{index + 1}</td>
-                  <td className="p-3">{`${employee.firstName} ${employee.lastName}`}</td>
-                  <td className="p-3">{employee.email}</td>
-                  <td className="p-3">{employee.employeeId}</td>
-                  <td className="p-3">{employee.position}</td>
-                  <td className="p-3">₱{employee.salary?.toLocaleString()}</td>
-                  <td className="p-3">{new Date(employee.hireDate).toLocaleDateString()}</td>
-                  <td className="p-3">
+                <tr key={employee._id}>
+                  <td>{index + 1}</td>
+                  <td>{`${employee.firstName} ${employee.lastName}`}</td>
+                  <td>{employee.email}</td>
+                  <td>{employee.employeeId}</td>
+                  <td>{employee.position}</td>
+                  <td>₱{employee.salary?.toLocaleString()}</td>
+                  <td>{new Date(employee.hireDate).toLocaleDateString()}</td>
+                  <td>
                     {employee.fingerprintEnrolled ? (
                       <div className="flex items-center gap-2">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -621,13 +711,14 @@ const Employees = () => {
                       </div>
                     )}
                   </td>
-                  <td className="p-3">
+                  <td>
                     <button
                       onClick={() => handleDeleteClick(employee)}
-                      className="text-red-600 hover:text-red-900 mr-2"
+                      className="table-action-btn"
+                      style={{ background: '#fee2e2', color: '#991b1b' }}
                       title="Delete Employee"
                     >
-                      🗑️
+                      🗑️ Delete
                     </button>
                   </td>
                 </tr>
@@ -639,90 +730,88 @@ const Employees = () => {
 
       {/* Add Employee Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
-          <div className="relative p-8 border w-full max-w-4xl shadow-lg rounded-md bg-white mx-4">
-            <div className="mb-6">
-              <h3 className="text-2xl font-semibold leading-6 text-gray-900 mb-2">Add New Employee</h3>
-              <p className="text-sm text-gray-500">Fill in the employee details below</p>
+        <div className="employee-modal-overlay">
+          <div className="employee-modal-content">
+            <div className="employee-modal-header">
+              <h3 style={{ fontSize: '1.5rem', fontWeight: 600, color: '#111827', marginBottom: '0.5rem' }}>Add New Employee</h3>
+              <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Fill in the employee details below</p>
             </div>
             
-            <form onSubmit={handleAddEmployee} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+            <div className="employee-modal-body">
+            <form onSubmit={handleAddEmployee}>
+              <div className="form-grid-mobile">
+                <div className="form-field">
+                  <label className="form-label">First Name *</label>
                   <input
                     type="text"
                     placeholder="Enter first name"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                <div className="form-field">
+                  <label className="form-label">Last Name *</label>
                   <input
                     type="text"
                     placeholder="Enter last name"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <div className="form-field">
+                  <label className="form-label">Email *</label>
                   <input
                     type="email"
                     placeholder="Enter email address"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number *</label>
+                <div className="form-field">
+                  <label className="form-label">Contact Number *</label>
                   <input
                     type="tel"
                     placeholder="Enter contact number"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.contactNumber}
                     onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Employee ID</label>
+                <div className="form-field">
+                  <label className="form-label">Employee ID</label>
                   <input
                     type="text"
                     placeholder="Enter employee ID"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-yellow-50"
+                    className="form-input"
+                    style={{ background: '#fef3c7' }}
                     value={formData.employeeId}
                     onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
                   />
                 </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Position *</label>
+                <div className="form-field">
+                  <label className="form-label">Position *</label>
                   <input
                     type="text"
                     placeholder="Enter position"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.position}
                     onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                     required
                   />
                 </div>
-                {null}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Salary *</label>
+                <div className="form-field">
+                  <label className="form-label">Salary *</label>
                   <input
                     type="number"
                     placeholder="Enter salary"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.salary}
                     onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
                     required
@@ -730,11 +819,11 @@ const Employees = () => {
                     step="0.01"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hire Date *</label>
+                <div className="form-field">
+                  <label className="form-label">Hire Date *</label>
                   <input
                     type="date"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.hireDate}
                     onChange={(e) => {
                       logger.log('Date changed to:', e.target.value);
@@ -744,14 +833,10 @@ const Employees = () => {
                     required
                   />
                 </div>
-              </div>
-              
-              {/* 💰 Phase 1 Enhancement: Salary Rate Fields */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type *</label>
+                <div className="form-field">
+                  <label className="form-label">Employment Type *</label>
                   <select
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.employmentType}
                     onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
                     required
@@ -760,56 +845,55 @@ const Employees = () => {
                     <option value="On-Call">On-Call</option>
                     <option value="Administrative">Administrative</option>
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">Employment classification</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Daily Rate *</label>
+                <div className="form-field">
+                  <label className="form-label">Daily Rate *</label>
                   <input
                     type="number"
                     placeholder="550"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.dailyRate}
                     onChange={(e) => setFormData({ ...formData, dailyRate: parseFloat(e.target.value) })}
                     required
                     min="0"
                     step="0.01"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Default: ₱550/day</p>
+                  <small style={{ fontSize: '0.75rem', color: '#6b7280' }}>Default: ₱550/day</small>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Rate *</label>
+                <div className="form-field">
+                  <label className="form-label">Hourly Rate *</label>
                   <input
                     type="number"
                     placeholder="68.75"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.hourlyRate}
                     onChange={(e) => setFormData({ ...formData, hourlyRate: parseFloat(e.target.value) })}
                     required
                     min="0"
                     step="0.01"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Default: ₱68.75/hour</p>
+                  <small style={{ fontSize: '0.75rem', color: '#6b7280' }}>Default: ₱68.75/hour</small>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Overtime Rate *</label>
+                <div className="form-field">
+                  <label className="form-label">Overtime Rate *</label>
                   <input
                     type="number"
                     placeholder="85.94"
-                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="form-input"
                     value={formData.overtimeRate}
                     onChange={(e) => setFormData({ ...formData, overtimeRate: parseFloat(e.target.value) })}
                     required
                     min="0"
                     step="0.01"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Default: ₱85.94/hour</p>
+                  <small style={{ fontSize: '0.75rem', color: '#6b7280' }}>Default: ₱85.94/hour</small>
                 </div>
               </div>
               
               {/* Biometric Enrollment Section - Show after employee is created */}
               {showBiometricSection && editingEmployee && (
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">
+                <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e5e7eb' }}>
+                  <h4 style={{ fontSize: '1.125rem', fontWeight: 600, color: '#111827', marginBottom: '1rem' }}>
                     Biometric Enrollment (Optional)
                   </h4>
                   <BiometricEnrollmentSection
@@ -822,24 +906,41 @@ const Employees = () => {
                 </div>
               )}
               
-              <div className="flex gap-4 justify-end pt-4">
+              <div className="employee-modal-footer">
                 <button
                   type="button"
                   onClick={handleAddFormCancel}
-                  className="px-6 py-3 bg-gray-200 text-gray-800 text-base font-medium rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  style={{ 
+                    padding: '0.75rem 1.5rem', 
+                    background: '#e5e7eb', 
+                    color: '#374151', 
+                    border: 'none', 
+                    borderRadius: '8px', 
+                    fontWeight: 500, 
+                    cursor: 'pointer' 
+                  }}
                 >
                   {showBiometricSection ? 'Close' : 'Cancel'}
                 </button>
                 {!showBiometricSection && (
                   <button
                     type="submit"
-                    className="px-6 py-3 bg-blue-500 text-white text-base font-medium rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={{ 
+                      padding: '0.75rem 1.5rem', 
+                      background: '#3b82f6', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '8px', 
+                      fontWeight: 500, 
+                      cursor: 'pointer' 
+                    }}
                   >
                     Add Employee
                   </button>
                 )}
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}

@@ -12,8 +12,8 @@ const router = express.Router();
  * Complete cash advance management with approval workflow
  */
 
-// GET all cash advances (with pagination)
-router.get('/', setCacheHeaders(300), async (req, res) => {
+// GET archived cash advances only
+router.get('/archived', setCacheHeaders(300), async (req, res) => {
   try {
     const { status, employee } = req.query;
     
@@ -22,7 +22,10 @@ router.get('/', setCacheHeaders(300), async (req, res) => {
     const { page, limit, skip, maxLimit } = paginationParams;
     const safeLimit = Math.min(limit, maxLimit);
     
-    let query = {};
+    let query = {
+      // ✅ ONLY FETCH ARCHIVED RECORDS
+      archived: true
+    };
     
     if (status) {
       query.status = status;
@@ -35,22 +38,22 @@ router.get('/', setCacheHeaders(300), async (req, res) => {
     // Get total count
     const totalCount = await CashAdvance.countDocuments(query);
     
-    // Execute paginated query with proper error handling for populate
+    // Execute paginated query
     let advances;
     try {
+      // ✅ PERFORMANCE FIX: Optimized query with lean() and select
       advances = await CashAdvance.find(query)
         .populate('employee', 'firstName lastName employeeId email employmentType status')
-        
-        
+        .select('-__v') // Exclude version key
         .sort({ requestDate: -1 })
         .skip(skip)
         .limit(safeLimit)
-        .lean()
+        .lean() // Use lean() for faster queries
         .exec();
     } catch (populateError) {
-      console.error('Error populating cash advances:', populateError);
-      // If populate fails, return without populate
+      console.error('Error populating archived cash advances:', populateError);
       advances = await CashAdvance.find(query)
+        .select('-__v')
         .sort({ requestDate: -1 })
         .skip(skip)
         .limit(safeLimit)
@@ -60,6 +63,86 @@ router.get('/', setCacheHeaders(300), async (req, res) => {
     
     // Build paginated response
     const response = createPaginatedResponse(advances, totalCount, paginationParams);
+    
+    res.json({
+      success: true,
+      ...response
+    });
+  } catch (error) {
+    console.error('❌ Error in GET /api/cash-advance/archived:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch archived cash advances',
+      error: error.message
+    });
+  }
+});
+
+// GET all cash advances (with pagination)
+router.get('/', setCacheHeaders(300), async (req, res) => {
+  try {
+    // ✅ PERFORMANCE FIX: Start timing
+    const startTime = Date.now();
+    
+    const { status, employee } = req.query;
+    
+    // Parse pagination parameters
+    const paginationParams = getPaginationParams(req.query);
+    const { page, limit, skip, maxLimit } = paginationParams;
+    const safeLimit = Math.min(limit, maxLimit);
+    
+    let query = {};
+    
+    // ✅ FIX ISSUE #1: EXCLUDE ARCHIVED RECORDS FROM MAIN VIEW
+    // Only show non-archived records (archived = false or undefined)
+    query.archived = { $ne: true };
+    
+    if (status) {
+      query.status = status;
+    }
+    
+    if (employee) {
+      query.employee = employee;
+    }
+
+    // ✅ CRITICAL PERFORMANCE FIX: Run count and query in parallel
+    let advances;
+    let totalCount;
+    
+    try {
+      [totalCount, advances] = await Promise.all([
+        CashAdvance.countDocuments(query).exec(),
+        
+        CashAdvance.find(query)
+          .populate('employee', 'firstName lastName employeeId email employmentType status')
+          .select('-__v') // Exclude version key
+          .sort({ requestDate: -1 })
+          .skip(skip)
+          .limit(safeLimit)
+          .lean() // Use lean() for faster queries
+          .exec()
+      ]);
+    } catch (populateError) {
+      console.error('Error populating cash advances:', populateError);
+      // If populate fails, return without populate
+      [totalCount, advances] = await Promise.all([
+        CashAdvance.countDocuments(query).exec(),
+        
+        CashAdvance.find(query)
+          .select('-__v')
+          .sort({ requestDate: -1 })
+          .skip(skip)
+          .limit(safeLimit)
+          .lean()
+          .exec()
+      ]);
+    }
+    
+    // Build paginated response
+    const response = createPaginatedResponse(advances, totalCount, paginationParams);
+    
+    const endTime = Date.now();
+    console.log(`⚡ GET /cash-advance: ${endTime - startTime}ms`);
     
     res.json({
       success: true,
@@ -328,6 +411,72 @@ router.post('/:id/payment', async (req, res) => {
     res.status(400).json({
       success: false,
       message: error.message,
+      error: error.message
+    });
+  }
+});
+
+// PATCH archive cash advance
+router.patch('/:id/archive', async (req, res) => {
+  try {
+    const advance = await CashAdvance.findById(req.params.id);
+    
+    if (!advance) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cash advance not found'
+      });
+    }
+    
+    advance.archived = true;
+    await advance.save();
+    
+    const populatedAdvance = await CashAdvance.findById(advance._id)
+      .populate('employee', 'firstName lastName employeeId');
+    
+    res.json({
+      success: true,
+      message: 'Cash advance archived successfully',
+      advance: populatedAdvance
+    });
+  } catch (error) {
+    console.error('❌ Error archiving cash advance:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Failed to archive cash advance',
+      error: error.message
+    });
+  }
+});
+
+// PATCH restore archived cash advance
+router.patch('/:id/restore', async (req, res) => {
+  try {
+    const advance = await CashAdvance.findById(req.params.id);
+    
+    if (!advance) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cash advance not found'
+      });
+    }
+    
+    advance.archived = false;
+    await advance.save();
+    
+    const populatedAdvance = await CashAdvance.findById(advance._id)
+      .populate('employee', 'firstName lastName employeeId');
+    
+    res.json({
+      success: true,
+      message: 'Cash advance restored successfully',
+      advance: populatedAdvance
+    });
+  } catch (error) {
+    console.error('❌ Error restoring cash advance:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Failed to restore cash advance',
       error: error.message
     });
   }

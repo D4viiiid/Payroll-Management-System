@@ -1,4 +1,3 @@
-# 🛠️ GitHub Copilot Instructions for Employee Management & Payroll System
 
 **Version:** 1.0  
 **Owner:** Allan  

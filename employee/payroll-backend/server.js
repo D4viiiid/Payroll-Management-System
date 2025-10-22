@@ -10,6 +10,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, 'config.env') });
 
+// 🚀 PERFORMANCE: Initialize production logger (disables console.log in production)
+import './utils/productionLogger.js';
+
 // ✅ Verify email environment variables are loaded
 console.log('🔍 Environment Variables Check (server.js):');
 console.log('   EMAIL_USER:', process.env.EMAIL_USER || 'NOT SET!!!');
@@ -42,6 +45,8 @@ import scheduleRouter from './routes/schedule.js';
 // 📊 Phase 3 Enhancement: Reports & Archive Routes
 import reportsRouter from './routes/reports.js';
 import archiveRouter from './routes/archive.js';
+// 💰 Salary Rate Management Routes
+import salaryRateRouter from './routes/salaryRate.js';
 // 🤖 Phase 2 Enhancement: Automated Jobs
 import { 
   scheduleWeeklyPayroll, 
@@ -65,7 +70,7 @@ export const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
 // ✅ Middleware (must come first)
 app.use(cors());
-// 🚀 PERFORMANCE: Enable gzip/brotli compression
+// 🚀 PERFORMANCE: Enable gzip/brotli compression (but skip small responses)
 app.use(compression({
   filter: (req, res) => {
     if (req.headers['x-no-compression']) {
@@ -73,7 +78,8 @@ app.use(compression({
     }
     return compression.filter(req, res);
   },
-  level: 6 // Balance between speed and compression ratio
+  level: 6, // Balance between speed and compression ratio
+  threshold: 1024 // Only compress responses > 1KB (performance optimization)
 }));
 // Increase JSON payload limit for profile picture uploads (10MB)
 app.use(express.json({ limit: '10mb' }));
@@ -93,7 +99,26 @@ app.use((req, res, next) => {
 console.log('Attempting to connect to MongoDB...');
 let mongoConnected = false;
 
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/employee_db')
+// ✅ CRITICAL PERFORMANCE FIX: Add connection pooling and optimization settings
+const mongooseOptions = {
+  maxPoolSize: 50, // Maximum number of connections in the pool (default: 100, reduced to 50 for efficiency)
+  minPoolSize: 10, // Minimum number of connections to keep open (ensures connections ready)
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  serverSelectionTimeoutMS: 10000, // Timeout for server selection (10 seconds)
+  family: 4, // Use IPv4, skip trying IPv6 (faster connection)
+  maxIdleTimeMS: 30000, // Remove idle connections after 30 seconds
+  connectTimeoutMS: 10000, // Timeout for initial connection (10 seconds)
+  retryWrites: true, // Retry failed write operations
+  w: 'majority', // Write concern for data durability
+  // ✅ Performance optimization: Use secondary reads for non-critical data
+  // This reduces load on primary and improves read performance
+  readPreference: 'primaryPreferred', // Use primary, fall back to secondary if primary unavailable
+};
+
+// ✅ CRITICAL: Set Mongoose strictQuery to false to prevent deprecation warnings
+mongoose.set('strictQuery', false);
+
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/employee_db', mongooseOptions)
   .then(() => {
     console.log('MongoDB Connected Successfully');
     mongoConnected = true;
@@ -133,6 +158,8 @@ app.use('/api/mandatory-deductions', mandatoryDeductionsRouter);
 app.use('/api/schedules', scheduleRouter);
 // 📊 Phase 3 Enhancement: Reports & Archive Routes
 app.use('/api/reports', reportsRouter);
+// 💰 Salary Rate Management Routes
+app.use('/api/salary-rate', salaryRateRouter);
 app.use('/api/archive', archiveRouter);
 
 

@@ -8,6 +8,8 @@ import logo from '../assets/logo.png';
 import loginImage from '../assets/login.png';
 import loginImage1 from '../assets/login1.png';
 import loginImage2 from '../assets/login2.png';
+import PinInput from './PinInput';
+import './Login.responsive.css';
 
 // Real-time clock component
 function ClockBar() {
@@ -21,7 +23,7 @@ function ClockBar() {
   const date = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   return (
-    <span style={{ fontSize: '0.9rem', fontWeight: 500, color: 'white' }}>
+    <span className="login-clock-text">
       {day} | {date} {time}
     </span>
   );
@@ -33,6 +35,11 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  // PIN verification state
+  const [showPinVerification, setShowPinVerification] = useState(false);
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pendingAdminData, setPendingAdminData] = useState(null);
 
   const navigate = useNavigate();
 
@@ -57,23 +64,59 @@ const Login = () => {
     e.preventDefault();
     setError("");
 
-    // Admin login
-    if (username === "admin" && password === "admin123") {
-      localStorage.setItem('userRole', 'admin');
-      navigate("/dashboard");
-      return;
-    }
-
-    // Employee login - authenticate against MongoDB
+    // Validate credentials first - removed hardcoded admin check
     try {
       const loginResult = await employeeApi.login({ username, password });
 
       if (loginResult.error) {
         setError(loginResult.error);
+        toast.error(loginResult.error);
         return;
       }
 
-      // Successful login
+      // ✅ FIX: Check if backend requires PIN verification (for admins with PIN)
+      if (loginResult.requiresPin === true) {
+        // Backend explicitly requires PIN verification
+        setPendingAdminData({
+          token: loginResult.token,
+          employee: loginResult.employee,
+          employeeId: loginResult.employee.employeeId || loginResult.employee.username
+        });
+        
+        // Show PIN verification screen
+        setShowPinVerification(true);
+        toast.info('Please enter your 6-digit PIN');
+        return;
+      }
+
+      // Check if this is an admin account without PIN (legacy check)
+      if (loginResult.employee && loginResult.employee.isAdmin) {
+        // Check if PIN is set up
+        if (!loginResult.employee.adminPin) {
+          toast.error('Admin PIN not configured. Please contact system administrator.');
+          setError("Admin PIN not configured. Please contact system administrator.");
+          return;
+        }
+        
+        // Admin with PIN - this path should not be reached if backend is working correctly
+        // because backend should return requiresPin: true
+        setPendingAdminData({
+          token: loginResult.token,
+          employee: loginResult.employee,
+          employeeId: loginResult.employee.employeeId || loginResult.employee.username
+        });
+        
+        // Show PIN verification screen
+        setShowPinVerification(true);
+        toast.info('Please enter your 6-digit PIN');
+        return;
+      }
+
+      // Regular employee login - no PIN required
+      if (loginResult.token) {
+        localStorage.setItem('token', loginResult.token);
+      }
+
       const employeeData = {
         ...loginResult.employee,
         requiresPasswordChange: loginResult.requiresPasswordChange || false
@@ -84,209 +127,171 @@ const Login = () => {
       navigate("/employee-dashboard");
 
     } catch (error) {
-      logger.error('Login error:', error);
+      console.error('Login error:', error);
       setError("Login failed. Please try again.");
+      toast.error("Login failed. Please try again.");
     }
+  };
+
+  const handlePinComplete = async (pin) => {
+    if (!pendingAdminData) {
+      setError("Session expired. Please login again.");
+      setShowPinVerification(false);
+      return;
+    }
+
+    // Prevent multiple submissions
+    if (pinLoading) {
+      return;
+    }
+
+    setPinLoading(true);
+    setError("");
+
+    try {
+      // Verify PIN with backend
+      const response = await fetch('http://localhost:5000/api/employees/admin/verify-pin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          employeeId: pendingAdminData.employeeId,
+          pin: pin
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        setError(result.message || 'Invalid PIN');
+        toast.error(result.message || 'Invalid PIN');
+        setPinLoading(false);
+        
+        // Reset PIN input after failed attempt
+        setTimeout(() => {
+          setShowPinVerification(false);
+          setPendingAdminData(null);
+          setPassword("");
+        }, 2000);
+        return;
+      }
+
+      // PIN verified successfully - complete admin login
+      localStorage.setItem('token', pendingAdminData.token);
+      localStorage.setItem('userRole', 'admin');
+      localStorage.setItem('currentEmployee', JSON.stringify(pendingAdminData.employee));
+      
+      // Show success message ONCE
+      toast.success('PIN verified successfully');
+      
+      // Hide PIN overlay and navigate
+      setShowPinVerification(false);
+      setPinLoading(false);
+      setPendingAdminData(null);
+      
+      // Small delay to ensure state updates before navigation
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 100);
+
+    } catch (error) {
+      console.error('PIN verification error:', error);
+      setError("PIN verification failed. Please try again.");
+      toast.error("PIN verification failed. Please try again.");
+      setPinLoading(false);
+    }
+  };
+
+  const handlePinCancel = () => {
+    setShowPinVerification(false);
+    setPendingAdminData(null);
+    setPassword("");
+    setError("");
+    toast.info('Login cancelled');
   };
 
 
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #fce4ec 0%, #f8bbd0 50%, #f48fb1 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexDirection: 'column',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
+    <div className="login-wrapper">
+      {/* PIN Verification Modal Overlay */}
+      {showPinVerification && (
+        <div className="pin-verification-overlay">
+          <PinInput 
+            onComplete={handlePinComplete}
+            onCancel={handlePinCancel}
+            loading={pinLoading}
+          />
+        </div>
+      )}
+
       {/* Decorative Background Elements */}
-      <div style={{
-        position: 'absolute',
-        top: '-10%',
-        right: '-5%',
-        width: '300px',
-        height: '300px',
-        background: 'rgba(255, 255, 255, 0.1)',
-        borderRadius: '50%',
-        filter: 'blur(60px)',
-      }} />
-      <div style={{
-        position: 'absolute',
-        bottom: '-10%',
-        left: '-5%',
-        width: '400px',
-        height: '400px',
-        background: 'rgba(255, 255, 255, 0.1)',
-        borderRadius: '50%',
-        filter: 'blur(80px)',
-      }} />
+      <div className="login-bg-circle login-bg-circle-top" />
+      <div className="login-bg-circle login-bg-circle-bottom" />
 
       {/* Real-time Clock Header */}
-      <div style={{
-        position: 'absolute',
-        top: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        background: 'linear-gradient(135deg, #f8b6c1 0%, #f06a98 100%)',
-        color: 'white',
-        padding: '10px 30px',
-        borderRadius: '25px',
-        boxShadow: '0 4px 15px rgba(240, 106, 152, 0.3)',
-        zIndex: 100,
-      }}>
+      <div className="login-clock-bar">
         <ClockBar />
       </div>
 
       {/* Main Login Container */}
-      <div style={{
-        display: 'flex',
-        width: '1200px',
-        minHeight: '650px',
-        borderRadius: '20px',
-        overflow: 'hidden',
-        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)',
-        background: '#fff',
-        marginTop: '40px',
-        position: 'relative',
-        zIndex: 10,
-      }}>
+      <div className="login-main-container">
         {/* Left Side - Login Form */}
-        <div style={{
-          flex: '1',
-          background: '#fff',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '60px 50px',
-        }}>
+        <div className="login-form-section">
           {/* Logo */}
           <img
             src={logo}
             alt="Garden & Landscaping Logo"
-            style={{
-              width: '350px',
-              marginBottom: '2rem',
-              filter: 'drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1))',
-            }}
+            className="login-logo"
           />
           
           {/* Welcome Text */}
-          <h2 style={{
-            fontSize: '2.7rem',
-            fontWeight: '700',
-            color: '#2d3748',
-            marginBottom: '0.7rem',
-            textAlign: 'center',
-          }}>
+          <h2 className="login-welcome-title">
             Welcome Back
           </h2>
-          <p style={{
-            fontSize: '1.1rem',
-            color: '#718096',
-            marginBottom: '2.5rem',
-            textAlign: 'center',
-          }}>
+          <p className="login-subtitle">
             Payroll Management System
           </p>
           
           {/* Login Form */}
-          <form style={{ width: '100%', maxWidth: '400px' }} onSubmit={handleLogin}>
+          <form className="login-form" onSubmit={handleLogin}>
             {/* Username Input */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{
-                display: 'block',
-                fontSize: '1rem',
-                fontWeight: '500',
-                color: '#4a5568',
-                marginBottom: '0.6rem',
-              }}>
+            <div className="login-input-wrapper">
+              <label className="login-label">
                 Username or Employee ID
               </label>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: '#f7fafc',
-                borderRadius: '10px',
-                padding: '0.9rem 1.2rem',
-                border: '2px solid #e2e8f0',
-                transition: 'all 0.3s',
-              }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#f06a98'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
-              >
-                <FaUser style={{ color: '#a0aec0', marginRight: 10, fontSize: '1.2rem' }} />
+              <div className="login-input-container">
+                <FaUser className="login-input-icon" />
                 <input
                   type="text"
                   placeholder="Enter your username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  style={{
-                    border: 'none',
-                    outline: 'none',
-                    background: 'transparent',
-                    width: '100%',
-                    fontSize: '1.05rem',
-                    color: '#2d3748',
-                  }}
+                  className="login-input-field"
                   autoComplete="username"
                 />
               </div>
             </div>
             
             {/* Password Input */}
-            <div style={{ marginBottom: '1.8rem' }}>
-              <label style={{
-                display: 'block',
-                fontSize: '1rem',
-                fontWeight: '500',
-                color: '#4a5568',
-                marginBottom: '0.6rem',
-              }}>
+            <div className="login-input-wrapper">
+              <label className="login-label">
                 Password
               </label>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: '#f7fafc',
-                borderRadius: '10px',
-                padding: '0.9rem 1.2rem',
-                border: '2px solid #e2e8f0',
-                transition: 'all 0.3s',
-              }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#f06a98'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
-              >
-                <FaLock style={{ color: '#a0aec0', marginRight: 10, fontSize: '1.2rem' }} />
+              <div className="login-input-container">
+                <FaLock className="login-input-icon" />
                 <input
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  style={{
-                    border: 'none',
-                    outline: 'none',
-                    background: 'transparent',
-                    width: '100%',
-                    fontSize: '1.05rem',
-                    color: '#2d3748',
-                  }}
+                  className="login-input-field"
                   autoComplete="current-password"
                 />
                 <span 
                   onClick={togglePassword} 
-                  style={{ 
-                    cursor: 'pointer', 
-                    color: '#a0aec0', 
-                    marginLeft: 8,
-                    fontSize: '1.2rem',
-                    transition: 'color 0.2s',
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.color = '#f06a98'}
-                  onMouseOut={(e) => e.currentTarget.style.color = '#a0aec0'}
+                  className="login-password-toggle"
                 >
                   {showPassword ? <FaEyeSlash /> : <FaEye />}
                 </span>
@@ -295,16 +300,7 @@ const Login = () => {
             
             {/* Error Message */}
             {error && (
-              <p style={{ 
-                color: '#e53e3e', 
-                textAlign: 'center', 
-                marginBottom: '1.2rem',
-                fontSize: '1rem',
-                background: '#fff5f5',
-                padding: '0.9rem',
-                borderRadius: '8px',
-                border: '1px solid #feb2b2',
-              }}>
+              <p className="login-error-message">
                 {error}
               </p>
             )}
@@ -312,29 +308,7 @@ const Login = () => {
             {/* Login Button */}
             <button
               type="submit"
-              style={{
-                width: '100%',
-                background: 'linear-gradient(135deg, #f06a98 0%, #ec407a 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '1rem 0',
-                fontWeight: '600',
-                fontSize: '1.1rem',
-                letterSpacing: '0.5px',
-                boxShadow: '0 4px 15px rgba(240, 106, 152, 0.3)',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                textTransform: 'uppercase',
-              }}
-              onMouseOver={(e) => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 6px 20px rgba(240, 106, 152, 0.4)';
-              }}
-              onMouseOut={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 4px 15px rgba(240, 106, 152, 0.3)';
-              }}
+              className="login-button"
             >
               Sign In
             </button>
@@ -342,75 +316,28 @@ const Login = () => {
         </div>
 
         {/* Right Side - Image Slider */}
-        <div style={{
-          flex: '1',
-          background: '#f06a98',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '0',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
+        <div className="login-image-section">
           {/* Background Pattern */}
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%)',
-          }} />
+          <div className="login-image-bg-pattern" />
           
           {/* Image Slider */}
-          <div style={{
-            width: '100%',
-            height: '100%',
-            position: 'relative',
-            overflow: 'hidden',
-          }}>
+          <div className="login-image-slider-container">
             {sliderImages.map((image, index) => (
               <img
                 key={index}
                 src={image}
                 alt={`Garden & Landscaping ${index + 1}`}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  opacity: currentImageIndex === index ? 1 : 0,
-                  transition: 'opacity 1s ease-in-out',
-                  zIndex: currentImageIndex === index ? 2 : 1,
-                  filter: 'drop-shadow(0 10px 30px rgba(0, 0, 0, 0.2))',
-                }}
+                className={`login-slider-image ${currentImageIndex === index ? 'active' : ''}`}
               />
             ))}
           </div>
 
           {/* Slider Indicators */}
-          <div style={{
-            position: 'absolute',
-            bottom: '30px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            gap: '12px',
-            zIndex: 3,
-          }}>
+          <div className="login-slider-indicators">
             {sliderImages.map((_, index) => (
               <div
                 key={index}
-                style={{
-                  width: currentImageIndex === index ? '30px' : '10px',
-                  height: '10px',
-                  borderRadius: '5px',
-                  background: currentImageIndex === index ? 'white' : 'rgba(255, 255, 255, 0.5)',
-                  transition: 'all 0.3s ease',
-                  cursor: 'pointer',
-                }}
+                className={`login-slider-indicator ${currentImageIndex === index ? 'active' : ''}`}
                 onClick={() => setCurrentImageIndex(index)}
               />
             ))}
@@ -419,40 +346,13 @@ const Login = () => {
       </div>
 
       {/* Social Media Icons */}
-      <div style={{
-        marginTop: '2rem',
-        display: 'flex',
-        gap: '20px',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
+      <div className="login-social-container">
         {/* Facebook Icon */}
         <a
           href="https://www.facebook.com/balajadiarachel.com.ph"
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            width: '50px',
-            height: '50px',
-            borderRadius: '50%',
-            background: '#1877f2',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontSize: '24px',
-            textDecoration: 'none',
-            boxShadow: '0 4px 15px rgba(24, 119, 242, 0.3)',
-            transition: 'all 0.3s ease',
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.transform = 'translateY(-5px) scale(1.1)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(24, 119, 242, 0.5)';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.transform = 'translateY(0) scale(1)';
-            e.currentTarget.style.boxShadow = '0 4px 15px rgba(24, 119, 242, 0.3)';
-          }}
+          className="login-social-icon login-social-icon-facebook"
         >
           <FaFacebookF />
         </a>
@@ -462,42 +362,14 @@ const Login = () => {
           href="https://maps.app.goo.gl/RNvRoSwEbEi7cr81A"
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            width: '50px',
-            height: '50px',
-            borderRadius: '50%',
-            background: '#34a853',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontSize: '24px',
-            textDecoration: 'none',
-            boxShadow: '0 4px 15px rgba(52, 168, 83, 0.3)',
-            transition: 'all 0.3s ease',
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.transform = 'translateY(-5px) scale(1.1)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(52, 168, 83, 0.5)';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.transform = 'translateY(0) scale(1)';
-            e.currentTarget.style.boxShadow = '0 4px 15px rgba(52, 168, 83, 0.3)';
-          }}
+          className="login-social-icon login-social-icon-maps"
         >
           <FaMapMarkerAlt />
         </a>
       </div>
 
       {/* Footer Text */}
-      <p style={{
-        marginTop: '1rem',
-        color: '#2d3748',
-        fontSize: '0.875rem',
-        textAlign: 'center',
-        fontWeight: '500',
-        textShadow: '0 2px 4px rgba(255, 255, 255, 0.5)',
-      }}>
+      <p className="login-footer-text">
        <i> © 2025 Rae Disenyo Garden & Landscaping Services. All rights reserved.</i>
       </p>
     </div>

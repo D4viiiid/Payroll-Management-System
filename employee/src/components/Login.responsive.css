@@ -1,0 +1,1191 @@
+/* ================================================
+   LOGIN PAGE RESPONSIVE STYLES
+   Mobile-first approach with all breakpoints
+   ✅ FIX: Prevent page dragging with fixed positioning
+   ✅ FIX: Hide slider indicators
+   ================================================ */
+
+/* Base styles - Mobile first (< 576px) */
+.login-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  max-height: 100vh;
+  padding: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-clock-bar {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 350px;
+  padding: 8px 15px !important;
+  font-size: 0.75rem !important;
+  text-align: center;
+  z-index: 100;
+}
+
+.login-main-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  min-height: auto;
+  margin-top: 60px;
+  margin-bottom: 20px;
+  border-radius: 15px;
+  overflow: visible;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  background: #fff;
+  position: relative;
+}
+
+.login-form-section {
+  flex: 1 1 auto;
+  padding: 25px 20px !important;
+  order: 1;
+  min-height: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.login-logo {
+  width: 180px !important;
+  max-width: 90%;
+  margin-bottom: 1rem !important;
+  margin-top: 0.5rem !important;
+}
+
+.login-welcome-title {
+  font-size: 1.6rem !important;
+  margin-bottom: 0.4rem !important;
+}
+
+.login-subtitle {
+  font-size: 0.85rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.login-form {
+  width: 100%;
+  max-width: 100%;
+}
+
+.login-input-wrapper {
+  margin-bottom: 0.85rem;
+  width: 100%;
+}
+
+.login-input-wrapper input {
+  font-size: 0.9rem !important;
+}
+
+.login-input-wrapper svg {
+  font-size: 1rem !important;
+}
+
+.login-input-container {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.login-button {
+  padding: 0.75rem 0 !important;
+  font-size: 0.95rem !important;
+  margin-top: 0.5rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.login-image-section {
+  flex: 1 1 auto;
+  min-height: 300px;
+  order: 2;
+  display: flex;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ✅ FIX ISSUE #2: Hide slider indicators */
+.login-slider-indicators {
+  display: none !important;
+}
+
+.login-social-icons {
+  margin-top: 1.5rem;
+  gap: 15px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.login-social-icon {
+  width: 45px !important;
+  height: 45px !important;
+  font-size: 20px !important;
+}
+
+.login-footer-text {
+  margin-top: 1rem;
+  font-size: 0.75rem !important;
+  padding: 0 10px;
+}
+
+/* ================================================
+   MOBILE STANDARD (≥ 360px) - Common Android
+   ================================================ */
+@media (min-width: 360px) {
+  .login-clock-bar {
+    font-size: 0.8rem !important;
+    padding: 9px 18px !important;
+  }
+
+  .login-logo {
+    width: 220px !important;
+  }
+
+  .login-welcome-title {
+    font-size: 2rem !important;
+  }
+
+  .login-input-container {
+    padding: 0.8rem 1.1rem !important;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .login-social-icon {
+    width: 48px !important;
+    height: 48px !important;
+    font-size: 22px !important;
+  }
+}
+
+/* ================================================
+   MOBILE STANDARD (≥ 375px) - iPhone
+   ================================================ */
+@media (min-width: 375px) {
+  .login-main-container {
+    margin-top: 65px;
+  }
+
+  .login-form-section {
+    padding: 35px 25px !important;
+  }
+
+  .login-logo {
+    width: 240px !important;
+  }
+
+  .login-subtitle {
+    font-size: 0.95rem !important;
+  }
+
+  .login-input-container {
+    padding: 0.85rem 1.15rem !important;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .login-input-wrapper input {
+    font-size: 1rem !important;
+  }
+}
+
+/* ================================================
+   MOBILE LARGE (≥ 414px) - Large phones
+   ================================================ */
+@media (min-width: 414px) {
+  .login-clock-bar {
+    font-size: 0.85rem !important;
+    padding: 10px 20px !important;
+  }
+
+  .login-form-section {
+    padding: 40px 30px !important;
+  }
+
+  .login-logo {
+    width: 260px !important;
+  }
+
+  .login-welcome-title {
+    font-size: 2.2rem !important;
+  }
+
+  .login-subtitle {
+    font-size: 1rem !important;
+  }
+
+  .login-input-container {
+    padding: 0.9rem 1.2rem !important;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .login-button {
+    padding: 0.9rem 0 !important;
+    font-size: 1.05rem !important;
+  }
+
+  .login-social-icon {
+    width: 50px !important;
+    height: 50px !important;
+    font-size: 24px !important;
+  }
+}
+
+/* ================================================
+   MOBILE LARGE (≥ 576px) - Landscape phones
+   ================================================ */
+@media (min-width: 576px) {
+  .login-clock-bar {
+    font-size: 0.9rem !important;
+    padding: 10px 25px !important;
+    max-width: 400px;
+  }
+
+  .login-main-container {
+    max-width: 540px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .login-form-section {
+    padding: 45px 35px !important;
+  }
+
+  .login-logo {
+    width: 280px !important;
+  }
+
+  .login-welcome-title {
+    font-size: 2.4rem !important;
+  }
+
+  .login-image-section {
+    min-height: 300px;
+  }
+}
+
+/* ================================================
+   TABLET PORTRAIT (≥ 768px)
+   ✅ FIX: 40% Form / 60% Image Layout (Updated from 30/70)
+   ✅ FIX: Consistent Input Field Heights (min-height + height)
+   ✅ FIX: Reduced Input Field Spacing (0.5rem → 0.4rem)
+   ✅ FIX: Prevent page dragging (overflow: hidden)
+   ================================================ */
+@media (min-width: 768px) {
+  .login-wrapper {
+    padding: 20px;
+    overflow: hidden;
+  }
+
+  .login-clock-bar {
+    top: 20px;
+    font-size: 0.85rem !important;
+    padding: 8px 20px !important;
+    max-width: 500px;
+  }
+
+  .login-main-container {
+    flex-direction: row;
+    max-width: 720px;
+    min-width: 600px;
+    min-height: auto;
+    height: auto;
+    max-height: none;
+    margin-top: 70px;
+    margin-bottom: 20px;
+    border-radius: 20px;
+    overflow: visible;
+  }
+
+  /* ✅ FIX ISSUE #3: 40% width for form section */
+  .login-form-section {
+    flex: 0 0 40%;
+    min-width: 250px;
+    max-width: 40%;
+    padding: 15px 18px !important;
+    order: 1;
+    min-height: auto;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    overflow: visible;
+  }
+
+  .login-logo {
+    width: clamp(110px, 55%, 140px) !important;
+    max-width: 100%;
+    margin-bottom: 0.4rem !important;
+    margin-top: 0 !important;
+  }
+
+  .login-welcome-title {
+    font-size: clamp(1.1rem, 3.5vw, 1.4rem) !important;
+    margin-bottom: 0.2rem !important;
+  }
+
+  .login-subtitle {
+    font-size: clamp(0.65rem, 1.6vw, 0.75rem) !important;
+    margin-bottom: 0.7rem !important;
+  }
+
+  .login-form {
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 5px;
+  }
+
+  /* ✅ FIX ISSUE #2: Reduced margin-bottom for closer spacing */
+  .login-input-wrapper {
+    margin-bottom: 0.4rem;
+    width: 100%;
+  }
+
+  /* ✅ FIX ISSUE #1: Fixed height for consistent input sizing */
+  .login-input-container {
+    padding: 0.6rem 0.8rem !important;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .login-label {
+    font-size: clamp(0.68rem, 1.5vw, 0.73rem) !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  .login-input-wrapper input {
+    font-size: clamp(0.72rem, 1.7vw, 0.82rem) !important;
+  }
+
+  .login-input-wrapper svg {
+    font-size: clamp(0.82rem, 1.9vw, 0.92rem) !important;
+  }
+
+  .login-button {
+    padding: 0.65rem 0 !important;
+    font-size: clamp(0.78rem, 1.7vw, 0.88rem) !important;
+    margin-top: 0.5rem !important;
+    width: 100%;
+  }
+
+  /* ✅ FIX ISSUE #3: 60% width for image section */
+  .login-image-section {
+    flex: 0 0 60%;
+    min-width: 350px;
+    max-width: 60%;
+    min-height: 400px;
+    height: auto;
+    max-height: none;
+    align-self: stretch;
+    order: 2;
+    display: flex !important;
+    position: relative;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  /* Slider indicators already hidden globally */
+
+  .login-social-icons {
+    margin-top: 1.2rem;
+    gap: 12px;
+  }
+
+  .login-social-icon {
+    width: 42px !important;
+    height: 42px !important;
+    font-size: 20px !important;
+  }
+
+  .login-footer-text {
+    font-size: 0.7rem !important;
+  }
+}
+
+/* ================================================
+   TABLET LANDSCAPE (≥ 1024px)
+   ✅ 40% Form / 60% Image Layout
+   ================================================ */
+@media (min-width: 1024px) {
+  .login-main-container {
+    max-width: 950px;
+    min-width: 750px;
+    min-height: auto;
+    height: auto;
+    max-height: none;
+  }
+
+  .login-form-section {
+    flex: 0 0 40%;
+    max-width: 40%;
+    padding: 18px 22px !important;
+    min-width: 300px;
+  }
+
+  .login-logo {
+    width: clamp(120px, 52%, 150px) !important;
+  }
+
+  .login-welcome-title {
+    font-size: clamp(1.2rem, 3vw, 1.5rem) !important;
+  }
+
+  .login-subtitle {
+    font-size: clamp(0.7rem, 1.5vw, 0.8rem) !important;
+  }
+
+  .login-input-wrapper {
+    margin-bottom: 0.45rem;
+  }
+
+  .login-input-container {
+    padding: 0.65rem 0.85rem !important;
+    min-height: 46px;
+    height: 46px;
+  }
+
+  .login-image-section {
+    flex: 0 0 60%;
+    max-width: 60%;
+    min-width: 450px;
+    min-height: 450px;
+  }
+}
+
+/* ================================================
+   DESKTOP (≥ 1200px)
+   ✅ 40% Form / 60% Image Layout
+   ================================================ */
+@media (min-width: 1200px) {
+  .login-main-container {
+    max-width: 1050px;
+    min-width: 850px;
+  }
+
+  .login-form-section {
+    flex: 0 0 40%;
+    max-width: 40%;
+    padding: 20px 25px !important;
+    min-width: 340px;
+  }
+
+  .login-logo {
+    width: clamp(130px, 50%, 160px) !important;
+  }
+
+  .login-welcome-title {
+    font-size: clamp(1.3rem, 2.8vw, 1.6rem) !important;
+  }
+
+  .login-subtitle {
+    font-size: clamp(0.75rem, 1.4vw, 0.85rem) !important;
+  }
+
+  .login-input-wrapper {
+    margin-bottom: 0.5rem;
+  }
+
+  .login-input-container {
+    padding: 0.7rem 0.9rem !important;
+    min-height: 48px;
+    height: 48px;
+  }
+
+  .login-image-section {
+    flex: 0 0 60%;
+    max-width: 60%;
+    min-width: 510px;
+    min-height: 480px;
+  }
+}
+
+/* ================================================
+   LARGE DESKTOP (≥ 1440px)
+   ✅ 40% Form / 60% Image Layout
+   ================================================ */
+@media (min-width: 1440px) {
+  .login-main-container {
+    max-width: 1150px;
+    min-width: 950px;
+  }
+
+  .login-form-section {
+    flex: 0 0 40%;
+    max-width: 40%;
+    padding: 22px 28px !important;
+    min-width: 380px;
+  }
+
+  .login-logo {
+    width: clamp(140px, 48%, 170px) !important;
+  }
+
+  .login-welcome-title {
+    font-size: clamp(1.4rem, 2.6vw, 1.7rem) !important;
+  }
+
+  .login-subtitle {
+    font-size: clamp(0.8rem, 1.3vw, 0.9rem) !important;
+  }
+
+  .login-input-wrapper {
+    margin-bottom: 0.55rem;
+  }
+
+  .login-input-container {
+    padding: 0.75rem 0.95rem !important;
+    min-height: 50px;
+    height: 50px;
+  }
+
+  .login-image-section {
+    flex: 0 0 60%;
+    max-width: 60%;
+    min-width: 570px;
+    min-height: 500px;
+  }
+}
+
+/* ================================================
+   FULL HD (≥ 1920px)
+   ✅ 40% Form / 60% Image Layout
+   ================================================ */
+@media (min-width: 1920px) {
+  .login-main-container {
+    max-width: 1250px;
+    min-width: 1050px;
+  }
+
+  .login-form-section {
+    flex: 0 0 40%;
+    max-width: 40%;
+    padding: 25px 32px !important;
+    min-width: 420px;
+  }
+
+  .login-logo {
+    width: clamp(150px, 46%, 180px) !important;
+  }
+
+  .login-welcome-title {
+    font-size: clamp(1.5rem, 2.4vw, 1.8rem) !important;
+  }
+
+  .login-subtitle {
+    font-size: clamp(0.85rem, 1.2vw, 0.95rem) !important;
+  }
+
+  .login-input-wrapper {
+    margin-bottom: 0.6rem;
+  }
+
+  .login-input-container {
+    padding: 0.8rem 1rem !important;
+    min-height: 52px;
+    height: 52px;
+  }
+
+  .login-image-section {
+    flex: 0 0 60%;
+    max-width: 60%;
+    min-width: 630px;
+    min-height: 520px;
+  }
+}
+
+/* ================================================
+   UTILITY CLASSES FOR LOGIN
+   ================================================ */
+.login-error-message {
+  font-size: 0.9rem;
+  padding: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .login-error-message {
+    font-size: 1rem;
+    padding: 0.9rem;
+  }
+}
+
+/* Background elements */
+.login-bg-circle {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+}
+
+.login-bg-circle-top {
+  top: -10%;
+  right: -5%;
+  width: 300px;
+  height: 300px;
+  filter: blur(60px);
+}
+
+.login-bg-circle-bottom {
+  bottom: -10%;
+  left: -5%;
+  width: 400px;
+  height: 400px;
+  filter: blur(80px);
+}
+
+/* Clock bar styling */
+.login-clock-bar {
+  background: linear-gradient(135deg, #f8b6c1 0%, #f06a98 100%);
+  color: white;
+  border-radius: 25px;
+  box-shadow: 0 4px 15px rgba(240, 106, 152, 0.3);
+}
+
+.login-clock-text {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: white;
+}
+
+/* Main container styling */
+.login-main-container {
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  background: #fff;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  overflow: visible;
+}
+
+/* Ensure proper flex behavior for both sections */
+.login-form-section,
+.login-image-section {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+/* Form section styling */
+.login-form-section {
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.login-logo {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+}
+
+.login-welcome-title {
+  font-weight: 700;
+  color: #2d3748;
+  text-align: center;
+}
+
+.login-subtitle {
+  color: #718096;
+  text-align: center;
+}
+
+/* Input fields styling */
+.login-label {
+  display: block;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #4a5568;
+  margin-bottom: 0.6rem;
+}
+
+.login-input-container {
+  display: flex;
+  align-items: center;
+  background: #f7fafc;
+  border-radius: 10px;
+  padding: 0.9rem 1.2rem;
+  border: 2px solid #e2e8f0;
+  transition: all 0.3s;
+  min-height: 50px;
+  height: 50px;
+  box-sizing: border-box;
+  gap: 10px;
+  position: relative;
+}
+
+.login-input-container:focus-within {
+  border-color: #f06a98;
+}
+
+.login-input-icon {
+  color: #a0aec0;
+  margin-right: 0px;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-input-field {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  font-size: 1.05rem !important;
+  color: #2d3748;
+  flex: 1;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-width: 0;
+  line-height: 1.5 !important;
+  vertical-align: middle;
+  height: auto;
+  font-family: inherit;
+  letter-spacing: normal;
+}
+
+/* ✅ FIX: Ensure both input types have identical styling */
+input[type="text"].login-input-field,
+input[type="password"].login-input-field {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  font-size: 1.05rem !important;
+  color: #2d3748;
+  flex: 1;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-width: 0;
+  line-height: 1.5 !important;
+  vertical-align: middle;
+  height: auto;
+  font-family: inherit;
+  letter-spacing: normal;
+  box-sizing: border-box;
+}
+
+/* ✅ FIX: Placeholder alignment - perfect vertical and horizontal alignment */
+.login-input-field::placeholder,
+input[type="text"].login-input-field::placeholder,
+input[type="password"].login-input-field::placeholder {
+  color: #a0aec0 !important;
+  font-size: 1.05rem !important;
+  opacity: 0.8 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1.5 !important;
+  vertical-align: middle !important;
+  transform: translateY(0) !important;
+  font-family: inherit !important;
+  letter-spacing: normal !important;
+}
+
+.login-input-field::-webkit-input-placeholder,
+input[type="text"].login-input-field::-webkit-input-placeholder,
+input[type="password"].login-input-field::-webkit-input-placeholder {
+  color: #a0aec0 !important;
+  font-size: 1.05rem !important;
+  opacity: 0.8 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1.5 !important;
+  vertical-align: middle !important;
+  transform: translateY(0) !important;
+  font-family: inherit !important;
+  letter-spacing: normal !important;
+}
+
+.login-input-field::-moz-placeholder,
+input[type="text"].login-input-field::-moz-placeholder,
+input[type="password"].login-input-field::-moz-placeholder {
+  color: #a0aec0 !important;
+  font-size: 1.05rem !important;
+  opacity: 0.8 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1.5 !important;
+  vertical-align: middle !important;
+  transform: translateY(0) !important;
+  font-family: inherit !important;
+  letter-spacing: normal !important;
+}
+
+.login-input-field:-ms-input-placeholder,
+input[type="text"].login-input-field:-ms-input-placeholder,
+input[type="password"].login-input-field:-ms-input-placeholder {
+  color: #a0aec0 !important;
+  font-size: 1.05rem !important;
+  opacity: 0.8 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1.5 !important;
+  vertical-align: middle !important;
+  transform: translateY(0) !important;
+  font-family: inherit !important;
+  letter-spacing: normal !important;
+}
+
+.login-password-toggle {
+  cursor: pointer;
+  color: #a0aec0;
+  margin-left: 0;
+  font-size: 1.2rem;
+  transition: color 0.2s;
+  flex-shrink: 0;
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-password-toggle:hover {
+  color: #f06a98;
+}
+
+/* Error message styling */
+.login-error-message {
+  color: #e53e3e;
+  text-align: center;
+  margin-bottom: 0.8rem;
+  font-size: 0.85rem;
+  background: #fff5f5;
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #feb2b2;
+}
+
+/* Button styling */
+.login-button {
+  width: 100%;
+  background: linear-gradient(135deg, #f06a98 0%, #ec407a 100%);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 1rem 0;
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 15px rgba(240, 106, 152, 0.3);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+}
+
+.login-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(240, 106, 152, 0.4);
+}
+
+/* Image section styling */
+.login-image-section {
+  background: #f06a98;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  flex: 1;
+  min-height: 300px;
+}
+
+/* ✅ FIX ISSUE #2: Add linear gradient from image toward form */
+/* Mobile view: gradient at top (image below form) */
+.login-image-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(to bottom, #ffffff 0%, rgba(255, 255, 255, 0) 100%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Desktop view: gradient on left side (image on right of form) */
+@media (min-width: 768px) {
+  .login-image-section::before {
+    top: 0;
+    left: 0;
+    right: auto;
+    width: 200px;
+    height: 100%;
+    background: linear-gradient(to right, #ffffff 0%, rgba(255, 255, 255, 0) 100%);
+  }
+}
+
+.login-image-bg-pattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%), 
+                    radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+  z-index: 1;
+}
+
+.login-image-slider-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.login-slider-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  transition: opacity 1s ease-in-out;
+  z-index: 1;
+}
+
+.login-slider-image.active {
+  opacity: 1;
+  z-index: 2;
+}
+
+/* ✅ FIX ISSUE #2: Completely hide slider indicators and controls */
+.login-slider-indicators {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+.login-slider-indicator {
+  display: none !important;
+}
+
+.login-slider-indicator.active {
+  display: none !important;
+}
+
+.login-slider-indicator:hover {
+  display: none !important;
+}
+
+/* Social media icons */
+.login-social-container {
+  margin-top: 2rem;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-social-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 24px;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.login-social-icon-facebook {
+  background: #1877f2;
+  box-shadow: 0 4px 15px rgba(24, 119, 242, 0.3);
+}
+
+.login-social-icon-facebook:hover {
+  transform: translateY(-5px) scale(1.1);
+  box-shadow: 0 6px 20px rgba(24, 119, 242, 0.5);
+}
+
+.login-social-icon-maps {
+  background: #34a853;
+  box-shadow: 0 4px 15px rgba(52, 168, 83, 0.3);
+}
+
+.login-social-icon-maps:hover {
+  transform: translateY(-5px) scale(1.1);
+  box-shadow: 0 6px 20px rgba(52, 168, 83, 0.5);
+}
+
+/* Footer text */
+.login-footer-text {
+  margin-top: 1rem;
+  color: #2d3748;
+  font-size: 0.875rem;
+  text-align: center;
+  font-weight: 500;
+  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.5);
+}
+
+/* Wrapper gradient background */
+.login-wrapper {
+  background: linear-gradient(135deg, #fce4ec 0%, #f8bbd0 50%, #f48fb1 100%);
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+/* Hide image section on very small screens if needed */
+@media (max-width: 359px) {
+  .login-image-section {
+    display: none !important;
+  }
+
+  .login-main-container {
+    margin-top: 50px;
+  }
+  
+  .login-logo {
+    width: 160px !important;
+  }
+  
+  .login-welcome-title {
+    font-size: 1.4rem !important;
+  }
+  
+  .login-form-section {
+    padding: 25px 15px !important;
+    min-height: auto;
+  }
+}
+
+/* Landscape orientation adjustments for mobile */
+@media (max-height: 600px) and (orientation: landscape) {
+  .login-main-container {
+    margin-top: 70px;
+    margin-bottom: 20px;
+  }
+
+  .login-image-section {
+    min-height: 200px;
+  }
+
+  .login-social-container {
+    margin-top: 1rem;
+  }
+
+  .login-footer-text {
+    margin-top: 0.5rem;
+  }
+}
+
+/* Universal Zoom Protection (Critical Fix) */
+@media (min-width: 768px) {
+  /* Prevent container collapse on zoom */
+  .login-main-container {
+    min-width: 600px;
+    box-sizing: border-box;
+  }
+  
+  /* ✅ Form section: 40% with minimum width */
+  .login-form-section {
+    min-width: 250px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+  }
+  
+  /* ✅ Image section: 60% with minimum width */
+  .login-image-section {
+    min-width: 350px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+  }
+  
+  /* Ensure all nested elements use border-box */
+  .login-form,
+  .login-input-wrapper,
+  .login-input-container,
+  .login-button {
+    box-sizing: border-box;
+    width: 100%;
+  }
+  
+  /* ✅ FIX: Consistent input container sizing with fixed height */
+  .login-input-container {
+    min-height: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+  }
+  
+  /* Prevent text overflow */
+  .login-welcome-title,
+  .login-subtitle,
+  .login-label {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+}
+
+/* ================================================
+   PIN VERIFICATION OVERLAY
+   Full-screen modal for admin PIN verification
+   ================================================ */
+.pin-verification-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsive adjustments for PIN overlay */
+@media (max-width: 576px) {
+  .pin-verification-overlay {
+    padding: 1rem;
+  }
+}

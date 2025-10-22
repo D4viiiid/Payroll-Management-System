@@ -7,7 +7,12 @@ const router = express.Router();
 // 🔍 Get employee details by employeeId (for auto-fill)
 router.get("/employee/:id", async (req, res) => {
   try {
-    const employee = await Employee.findOne({ employeeId: req.params.id });
+    // ✅ PERFORMANCE FIX: Use lean() and select only needed fields
+    const employee = await Employee.findOne({ employeeId: req.params.id })
+      .select('firstName lastName status')
+      .lean()
+      .exec();
+      
     if (!employee) {
       return res.status(404).json({ message: "Employee not found" });
     }
@@ -50,7 +55,12 @@ router.post("/", async (req, res) => {
 // 📋 Get all salary records
 router.get("/", async (req, res) => {
   try {
-    const salaries = await Salary.find().sort({ date: -1 });
+    // ✅ PERFORMANCE FIX: Use lean() and field selection for faster queries
+    const salaries = await Salary.find()
+      .select('-__v') // Exclude version key
+      .sort({ date: -1 })
+      .lean() // Convert to plain objects for faster JSON serialization
+      .exec();
     res.json(salaries);
   } catch (error) {
     res.status(500).json({ message: "Error fetching salaries", error });

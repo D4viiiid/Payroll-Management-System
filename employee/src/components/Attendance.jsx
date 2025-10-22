@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { attendanceApi, employeeApi, eventBus } from "../services/apiService";
+import { getCurrentSalaryRate } from "../services/salaryRateService";
 import { useDebounce } from "../utils/debounce";
 import { logger } from "../utils/logger";
 import { optimizedMemo } from "../utils/reactOptimization";
 import AdminSidebar from "./AdminSidebar";
 import AdminHeader from "./AdminHeader";
+import "./Admin.responsive.css";
 
 // Memoized Attendance Row Component for better performance
 const AttendanceRow = optimizedMemo(
@@ -18,6 +21,9 @@ const AttendanceRow = optimizedMemo(
           record.status === 'Present' ? 'bg-blue-100 text-blue-800' : 
           record.status === 'Half-day' ? 'bg-yellow-100 text-yellow-800' :
           record.status === 'Full-day' ? 'bg-green-100 text-green-800' :
+          record.status === 'Invalid' ? 'bg-red-100 text-red-800' :
+          record.status === 'Overtime' ? 'bg-purple-100 text-purple-800' :
+          record.status === 'Absent' ? 'bg-gray-100 text-gray-800' :
           'bg-red-100 text-red-800'
         }`}>
           {record.status || 'Present'}
@@ -72,6 +78,9 @@ const ArchivedAttendanceRow = optimizedMemo(
           record.status === 'Present' ? 'bg-blue-100 text-blue-800' : 
           record.status === 'Half-day' ? 'bg-yellow-100 text-yellow-800' :
           record.status === 'Full-day' ? 'bg-green-100 text-green-800' :
+          record.status === 'Invalid' ? 'bg-red-100 text-red-800' :
+          record.status === 'Overtime' ? 'bg-purple-100 text-purple-800' :
+          record.status === 'Absent' ? 'bg-gray-100 text-gray-800' :
           'bg-red-100 text-red-800'
         }`}>
           {record.status || 'Present'}
@@ -127,6 +136,30 @@ const AttendancePage = () => {
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [errorAttendance, setErrorAttendance] = useState(null);
   const [errorEmployees, setErrorEmployees] = useState(null);
+  
+  // ✅ NEW: Sort and Status Filter State
+  const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
+  const [statusFilters, setStatusFilters] = useState({
+    'Present': false,
+    'Half-day': false,
+    'Full-day': false,
+    'Absent': false,
+    'Invalid': false
+  });
+  const location = useLocation();
+  
+  // ✅ FIX ISSUE #2: Toggle state for Important Notice dropdown
+  const [showImportantNotice, setShowImportantNotice] = useState(false);
+
+  // Mobile sidebar state for responsive design
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // 💰 Dynamic Salary Rate (fetched from backend)
+  const [salaryRate, setSalaryRate] = useState({ 
+    dailyRate: 550, 
+    hourlyRate: 68.75, 
+    overtimeRate: 85.94 
+  });
 
   // Function to add test attendance button for testing real-time updates
   const handleTestAttendance = async (employeeId) => {
@@ -165,7 +198,14 @@ const AttendancePage = () => {
     const transformed = attendanceRecords.map(record => {
       // Handle both new schema (date, timeIn, timeOut) and legacy schema (time)
       const recordDate = record.date || record.time;
-      const date = new Date(recordDate).toISOString().split('T')[0];
+      
+      // ✅ CRITICAL FIX: Convert UTC to Manila timezone (UTC+8) for display
+      // MongoDB stores: Oct 17 midnight Manila = Oct 16 4PM UTC (16:00:00.000Z)
+      // We need to add 8 hours to UTC to get Manila time
+      const recordDateObj = new Date(recordDate);
+      const manilaTimeMs = recordDateObj.getTime() + (8 * 60 * 60 * 1000); // Add 8 hours in milliseconds
+      const manilaDate = new Date(manilaTimeMs);
+      const date = manilaDate.toISOString().split('T')[0];
       
       // Get employee name from populated field or fallback to employeeMap
       let employeeName = 'Unknown';
@@ -185,37 +225,85 @@ const AttendancePage = () => {
         });
       };
 
-      // Calculate status based on timeIn and timeOut
-      let attendanceStatus = 'present'; // Default
+      // ✅ CRITICAL FIX: Use status directly from backend calculation (based on hours worked)
+      // DO NOT recalculate status based on time-out time - that was the bug!
+      // Backend already calculated status based on ACTUAL HOURS WORKED
+      
+      let attendanceStatus = record.status || 'present'; // Use backend status directly
       let timeOutColor = ''; // For color coding
       
-      if (record.timeIn && record.timeOut) {
-        // Employee has both timeIn and timeOut
+      // ✅ FALLBACK FIX: If record has both timeIn and timeOut but status is still 'present', 
+      // this is old data that needs recalculation
+      if (record.timeIn && record.timeOut && attendanceStatus === 'present') {
+        // Calculate hours worked for fallback
+        const timeInDate = new Date(record.timeIn);
         const timeOutDate = new Date(record.timeOut);
-        const timeOutHour = timeOutDate.getHours();
-        const timeOutMinute = timeOutDate.getMinutes();
-        const timeOutInMinutes = timeOutHour * 60 + timeOutMinute;
-        const fivePM = 17 * 60; // 5:00 PM = 17:00 in minutes
-        const sixPM = 18 * 60;  // 6:00 PM = 18:00 in minutes
+        const diffMs = timeOutDate - timeInDate;
+        const diffHours = diffMs / (1000 * 60 * 60);
         
-        if (timeOutInMinutes < fivePM) {
-          // Time out before 5:00 PM = Half Day
-          attendanceStatus = 'Half-day';
-          timeOutColor = 'yellow'; // Yellow for half-day
-        } else if (timeOutInMinutes === fivePM) {
-          // Time out exactly at 5:00 PM = Full Day
-          attendanceStatus = 'Full-day';
-          timeOutColor = 'green'; // Green for full-day
+        // Subtract 1 hour for lunch break if they worked through lunch time (12-1 PM)
+        const lunchHourStart = 12;
+        const lunchHourEnd = 13;
+        const timeInHour = timeInDate.getHours();
+        const timeOutHour = timeOutDate.getHours();
+        
+        let hoursWorked = diffHours;
+        if (timeInHour < lunchHourEnd && timeOutHour >= lunchHourEnd) {
+          hoursWorked -= 1; // Subtract lunch hour
+        }
+        
+        // Determine status based on hours worked
+        if (hoursWorked < 4) {
+          attendanceStatus = 'invalid';
+        } else if (hoursWorked < 6.5) {
+          attendanceStatus = 'half-day';
+        } else if (hoursWorked <= 8) {
+          attendanceStatus = 'full-day'; // ✅ FIX: Use 'full-day' instead of 'present'
         } else {
-          // Time out after 5:00 PM = Overtime
-          attendanceStatus = 'Full-day';
-          timeOutColor = 'darkgreen'; // Darker green for overtime
+          // Check if timed out after 5 PM for overtime
+          if (timeOutHour >= 17) {
+            attendanceStatus = 'overtime';
+          } else {
+            attendanceStatus = 'full-day'; // ✅ FIX: Use 'full-day' instead of 'present'
+          }
+        }
+        
+        console.log(`⚠️  Fallback calculation for ${record.employeeId}: ${hoursWorked.toFixed(2)} hours → ${attendanceStatus}`);
+      }
+      
+      // Set color based on status (for time-out column display)
+      if (record.timeIn && record.timeOut) {
+        // Employee has completed the day
+        if (attendanceStatus === 'invalid') {
+          timeOutColor = 'red'; // Red for invalid (<4 hours)
+        } else if (attendanceStatus === 'half-day') {
+          timeOutColor = 'yellow'; // Yellow for half-day (4-6.5 hours)
+        } else if (attendanceStatus === 'full-day') {
+          timeOutColor = 'green'; // Green for full-day (6.5-8 hours)
+        } else if (attendanceStatus === 'present') {
+          timeOutColor = 'green'; // Green for legacy full-day records (stored as 'present')
+        } else if (attendanceStatus === 'overtime') {
+          timeOutColor = 'darkgreen'; // Dark green for overtime (>8 hours + past 5PM)
         }
       } else if (record.timeIn && !record.timeOut) {
-        // Employee has timeIn but no timeOut = Currently Present
-        attendanceStatus = 'Present';
+        // Employee has timeIn but no timeOut = Currently Present (working)
+        attendanceStatus = 'present';
         timeOutColor = '';
       }
+      
+      // Capitalize first letter for display consistency
+      const capitalizeStatus = (status) => {
+        if (!status) return 'Present';
+        if (status === 'half-day') return 'Half-day';
+        if (status === 'full-day') return 'Full-day'; // ✅ FIX: Add full-day status
+        if (status === 'invalid') return 'Invalid';
+        if (status === 'overtime') return 'Overtime';
+        if (status === 'present') return 'Present';
+        if (status === 'absent') return 'Absent';
+        return status.charAt(0).toUpperCase() + status.slice(1);
+      };
+      
+      attendanceStatus = capitalizeStatus(attendanceStatus);
 
       return {
         id: record._id || `${record.employeeId}-${date}`,
@@ -227,7 +315,11 @@ const AttendancePage = () => {
         timeIn: formatTime(record.timeIn),
         timeOut: formatTime(record.timeOut),
         timeOutColor: timeOutColor, // Add color info for rendering
-        weekStart: getWeekStartDate(date)
+        weekStart: getWeekStartDate(date),
+        // ✅ CRITICAL FIX: Keep raw date values for filtering
+        rawTimeIn: record.timeIn,  // Keep original date for filtering
+        rawTimeOut: record.timeOut, // Keep original date for filtering
+        rawDate: record.date        // Keep original date for filtering
       };
     });
 
@@ -280,6 +372,18 @@ const AttendancePage = () => {
       setLoadingEmployees(false);
     }
   };
+
+  // 💰 Fetch current salary rate on component mount
+  useEffect(() => {
+    getCurrentSalaryRate()
+      .then(rate => {
+        setSalaryRate(rate);
+        logger.info('✅ Loaded current salary rate:', rate);
+      })
+      .catch(error => {
+        logger.error('❌ Failed to load salary rate, using defaults:', error);
+      });
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -436,28 +540,41 @@ const AttendancePage = () => {
 
     // Apply filters based on filter type
     if (filterType === 'today') {
-      // Get today's date in Philippines timezone (UTC+8)
-      // Since backend uses Philippines timezone, we need to match that
-      const today = new Date();
-      // Create date string in format YYYY-MM-DD based on user's date
-      // The backend stores dates in Philippines timezone, so we compare date strings
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      const todayStr = `${year}-${month}-${day}`;
+      // ✅ CRITICAL FIX: Use rawDate field (midnight Manila) for accurate filtering
+      // The Python script stores date as midnight Manila time in UTC (e.g., Oct 17 00:00 Manila = Oct 16 16:00 UTC)
+      // So we need to convert UTC back to Manila timezone by adding 8 hours
       
-      logger.log(`🔍 Filtering for today: ${todayStr}`);
+      // Get today's date in Manila timezone (UTC+8)
+      const now = new Date();
+      const manilaNow = new Date(now.getTime() + (8 * 60 * 60 * 1000)); // Add 8 hours
+      const todayStr = manilaNow.toISOString().split('T')[0]; // YYYY-MM-DD in Manila timezone
+      
+      logger.log(`🔍 Filtering for today (Manila timezone): ${todayStr}`);
       
       filtered = filtered.filter(record => {
-        // Extract date part from record.date (which may be a full timestamp)
-        const recordDate = new Date(record.date);
-        const recordYear = recordDate.getFullYear();
-        const recordMonth = String(recordDate.getMonth() + 1).padStart(2, '0');
-        const recordDay = String(recordDate.getDate()).padStart(2, '0');
-        const recordDateStr = `${recordYear}-${recordMonth}-${recordDay}`;
+        // Use rawDate field (midnight Manila stored in UTC)
+        const dateField = record.rawDate;
+        if (!dateField) {
+          logger.warn(`⚠️ No date found for record ${record.id}`);
+          return false;
+        }
         
-        logger.log(`   Record date: ${recordDateStr}, Match: ${recordDateStr === todayStr}`);
-        return recordDateStr === todayStr;
+        // Convert to Date object
+        const dateObj = new Date(dateField);
+        
+        // Validate date
+        if (isNaN(dateObj.getTime())) {
+          logger.warn(`⚠️ Invalid date detected for record ${record.id}:`, dateField);
+          return false;
+        }
+        
+        // Convert UTC date to Manila timezone by adding 8 hours
+        const manilaDate = new Date(dateObj.getTime() + (8 * 60 * 60 * 1000));
+        const recordDateStr = manilaDate.toISOString().split('T')[0];
+        
+        const match = recordDateStr === todayStr;
+        logger.log(`   Record ${record.employeeId}: Manila date=${recordDateStr}, Today=${todayStr}, Match=${match}`);
+        return match;
       });
       
       logger.log(`📊 Filtered ${filtered.length} records for today`);
@@ -470,8 +587,15 @@ const AttendancePage = () => {
         
         if (weekDates.start && weekDates.end) {
           filtered = filtered.filter(record => {
-            const recordDate = new Date(record.date);
-            const recordDateStr = recordDate.toISOString().split('T')[0];
+            const dateField = record.rawDate;
+            if (!dateField) return false;
+            
+            const dateObj = new Date(dateField);
+            if (isNaN(dateObj.getTime())) return false;
+            
+            // Convert UTC to Manila timezone by adding 8 hours
+            const manilaDate = new Date(dateObj.getTime() + (8 * 60 * 60 * 1000));
+            const recordDateStr = manilaDate.toISOString().split('T')[0];
             const isInRange = recordDateStr >= weekDates.start && recordDateStr <= weekDates.end;
             
             return isInRange;
@@ -488,8 +612,15 @@ const AttendancePage = () => {
         logger.log('🔄 Filtering by month:', monthStart, 'to', monthEnd);
         
         filtered = filtered.filter(record => {
-          const recordDate = new Date(record.date);
-          const recordDateStr = recordDate.toISOString().split('T')[0];
+          const dateField = record.rawDate;
+          if (!dateField) return false;
+          
+          const dateObj = new Date(dateField);
+          if (isNaN(dateObj.getTime())) return false;
+          
+          // Convert UTC to Manila timezone by adding 8 hours
+          const manilaDate = new Date(dateObj.getTime() + (8 * 60 * 60 * 1000));
+          const recordDateStr = manilaDate.toISOString().split('T')[0];
           return recordDateStr >= monthStart && recordDateStr <= monthEnd;
         });
       } catch (error) {
@@ -497,8 +628,15 @@ const AttendancePage = () => {
       }
     } else if (filterType === 'year' && selectedYear) {
       filtered = filtered.filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate.getFullYear().toString() === selectedYear;
+        const dateField = record.rawDate;
+        if (!dateField) return false;
+        
+        const dateObj = new Date(dateField);
+        if (isNaN(dateObj.getTime())) return false;
+        
+        // Convert UTC to Manila timezone by adding 8 hours
+        const manilaDate = new Date(dateObj.getTime() + (8 * 60 * 60 * 1000));
+        return manilaDate.getFullYear().toString() === selectedYear;
       });
     }
 
@@ -512,8 +650,50 @@ const AttendancePage = () => {
       });
     }
 
+    // ✅ NEW: Apply status filters
+    const activeStatuses = Object.keys(statusFilters).filter(k => statusFilters[k]);
+    if (activeStatuses.length > 0) {
+      filtered = filtered.filter(record => activeStatuses.includes(record.status));
+    }
+
+    // ✅ NEW: Apply sorting
+    if (sortConfig.field) {
+      filtered.sort((a, b) => {
+        let aVal = a[sortConfig.field];
+        let bVal = b[sortConfig.field];
+        
+        // Handle different field types
+        if (sortConfig.field === 'date') {
+          aVal = new Date(a.rawDate || a.date);
+          bVal = new Date(b.rawDate || b.date);
+        } else if (sortConfig.field === 'timeIn' || sortConfig.field === 'timeOut') {
+          // Convert time strings to comparable values
+          const timeToMinutes = (timeStr) => {
+            if (!timeStr || timeStr === '-') return -1;
+            const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+            if (!match) return -1;
+            let hours = parseInt(match[1]);
+            const minutes = parseInt(match[2]);
+            const period = match[3].toUpperCase();
+            if (period === 'PM' && hours !== 12) hours += 12;
+            if (period === 'AM' && hours === 12) hours = 0;
+            return hours * 60 + minutes;
+          };
+          aVal = timeToMinutes(aVal);
+          bVal = timeToMinutes(bVal);
+        } else if (typeof aVal === 'string') {
+          aVal = aVal.toLowerCase();
+          bVal = bVal.toLowerCase();
+        }
+        
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
     setFilteredData(filtered);
-  }, [debouncedSearchTerm, filterType, selectedDate, selectedYear, allAttendanceData]);
+  }, [debouncedSearchTerm, filterType, selectedDate, selectedYear, allAttendanceData, statusFilters, sortConfig]);
 
   // Get archived data
   const archivedData = allAttendanceData.filter(record => record.archived);
@@ -529,6 +709,63 @@ const AttendancePage = () => {
   // Calculate statistics for current filter
   const totalEmployees = filteredData.length;
 
+  // ✅ NEW: Sort handler
+  const handleSort = (field) => {
+    setSortConfig(prev => ({
+      field,
+      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  // ✅ NEW: Status filter toggle
+  const toggleStatusFilter = (status) => {
+    setStatusFilters(prev => ({
+      ...prev,
+      [status]: !prev[status]
+    }));
+  };
+
+  // ✅ NEW: Clear all status filters
+  const clearStatusFilters = () => {
+    setStatusFilters({
+      'Present': false,
+      'Half-day': false,
+      'Full-day': false,
+      'Absent': false,
+      'Invalid': false
+    });
+  };
+
+  // ✅ NEW: Apply preset filters from Dashboard navigation
+  useEffect(() => {
+    if (location.state?.presetFilter) {
+      const { presetFilter, presetDate, presetDateType } = location.state;
+      
+      // Apply status filter
+      if (presetFilter === 'fullDay') {
+        setStatusFilters(prev => ({ ...prev, 'Full-day': true }));
+      } else if (presetFilter === 'halfDay') {
+        setStatusFilters(prev => ({ ...prev, 'Half-day': true }));
+      } else if (presetFilter === 'today') {
+        setStatusFilters(prev => ({ ...prev, 'Present': true }));
+      } else if (presetFilter === 'absent') {
+        setStatusFilters(prev => ({ ...prev, 'Absent': true }));
+      } else if (presetFilter === 'invalid') {
+        // ✅ NEW: Handle invalid filter from Dashboard
+        setStatusFilters(prev => ({ ...prev, 'Invalid': true }));
+      }
+      
+      // Apply date filter
+      if (presetDate) {
+        setFilterType(presetDateType || 'today');
+        setSelectedDate(presetDate);
+      }
+      
+      // Clear the state to prevent re-triggering
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+  
   // Format date for display with error handling - NEW IMPROVED VERSION
   const formatDisplayDate = (dateString) => {
     try {
@@ -697,13 +934,30 @@ const AttendancePage = () => {
   };
 
   return (
-    <div className="d-flex" style={{ minHeight: '100vh', background: '#f8f9fb' }}>
-      {/* Fixed Sidebar - Using AdminSidebar Component */}
-      <AdminSidebar />
+    <div className="admin-page-wrapper">
+      {/* Mobile Hamburger Menu */}
+      <button
+        className="hamburger-menu-button"
+        onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+        aria-label="Toggle Menu"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
 
-      {/* Main Content with left margin for fixed sidebar */}
-      <div className="flex-1 overflow-auto" style={{ marginLeft: '280px' }}>
-        <div className="p-4">
+      {/* Mobile Sidebar Overlay */}
+      <div 
+        className={`mobile-sidebar-overlay ${isMobileSidebarOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileSidebarOpen(false)}
+      />
+
+      {/* Admin Sidebar */}
+      <AdminSidebar isMobileOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
+
+      {/* Main Content */}
+      <div className="admin-main-content">
+        <div className="admin-content-area">
           <div className="card shadow-sm mb-4" style={{ borderRadius: '15px', border: 'none' }}>
             {/* Header - Using AdminHeader Component */}
             <div style={{ borderRadius: '15px 15px 0 0', overflow: 'hidden' }}>
@@ -785,6 +1039,34 @@ const AttendancePage = () => {
                   />
                 </div>
 
+                {/* Status Filter Checkboxes */}
+                <div className="d-flex gap-2 align-items-center flex-wrap" style={{ backgroundColor: '#f8f9fa', padding: '10px 15px', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+                  <label className="text-sm font-medium text-gray-600 mb-0" style={{ fontWeight: '600', marginRight: '8px' }}>
+                    <i className="fas fa-filter me-1"></i>Status:
+                  </label>
+                  {Object.keys(statusFilters).map(status => (
+                    <label key={status} className="d-flex align-items-center gap-1 mb-0" style={{ cursor: 'pointer', fontSize: '0.875rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={statusFilters[status]}
+                        onChange={() => toggleStatusFilter(status)}
+                        className="form-check-input"
+                        style={{ marginTop: '0', cursor: 'pointer' }}
+                      />
+                      <span className="text-sm">{status}</span>
+                    </label>
+                  ))}
+                  {Object.values(statusFilters).some(v => v) && (
+                    <button
+                      onClick={clearStatusFilters}
+                      className="btn btn-sm btn-link text-primary"
+                      style={{ padding: '0 4px', fontSize: '0.75rem', textDecoration: 'underline' }}
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+
                 {/* Filter Type Selection */}
                 <div className="flex gap-2 items-center">
                   <label className="text-sm font-medium text-gray-600">Filter by:</label>
@@ -799,6 +1081,40 @@ const AttendancePage = () => {
                     <option value="week">Week</option>
                     <option value="month">Month</option>
                     <option value="year">Year</option>
+                  </select>
+                </div>
+
+                {/* Status Filter Dropdown - Mobile/Tablet Only */}
+                <div className="flex gap-2 items-center status-filter-dropdown">
+                  <label className="text-sm font-medium text-gray-600">Status:</label>
+                  <select 
+                    onChange={(e) => {
+                      const status = e.target.value;
+                      if (status === 'all') {
+                        clearStatusFilters();
+                      } else if (status) {
+                        // Clear all first, then set the selected one
+                        const newFilters = {
+                          'Present': false,
+                          'Half-day': false,
+                          'Full-day': false,
+                          'Absent': false,
+                          'Invalid': false
+                        };
+                        newFilters[status] = true;
+                        setStatusFilters(newFilters);
+                      }
+                    }}
+                    value={Object.keys(statusFilters).find(k => statusFilters[k]) || ''}
+                    className="border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500"
+                    style={{ color: 'black' }}
+                  >
+                    <option value="">All Status</option>
+                    <option value="Present">Present</option>
+                    <option value="Half-day">Half-day</option>
+                    <option value="Full-day">Full-day</option>
+                    <option value="Absent">Absent</option>
+                    <option value="Invalid">Invalid</option>
                   </select>
                 </div>
 
@@ -865,7 +1181,10 @@ const AttendancePage = () => {
                     color: '#ffffff',
                     padding: '10px 20px',
                     fontSize: '1rem',
-                    borderRadius: '8px'
+                    borderRadius: '8px',
+                    flex: '0 0 auto',
+                    width: 'auto',
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   <i className="fas fa-archive me-2"></i>
@@ -908,12 +1227,96 @@ const AttendancePage = () => {
                       <thead className="bg-gray-100 text-gray-600">
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">#</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Employee ID</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Employee Name</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Status</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Time In</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Time Out</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Date</th>
+                          <th 
+                            className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 user-select-none"
+                            onClick={() => handleSort('employeeId')}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div className="d-flex align-items-center gap-1">
+                              Employee ID
+                              {sortConfig.field === 'employeeId' && (
+                                <i className={`fas fa-sort-${sortConfig.direction === 'asc' ? 'up' : 'down'}`} style={{ fontSize: '0.75rem' }}></i>
+                              )}
+                              {sortConfig.field !== 'employeeId' && (
+                                <i className="fas fa-sort" style={{ fontSize: '0.75rem', opacity: 0.3 }}></i>
+                              )}
+                            </div>
+                          </th>
+                          <th 
+                            className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 user-select-none"
+                            onClick={() => handleSort('name')}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div className="d-flex align-items-center gap-1">
+                              Employee Name
+                              {sortConfig.field === 'name' && (
+                                <i className={`fas fa-sort-${sortConfig.direction === 'asc' ? 'up' : 'down'}`} style={{ fontSize: '0.75rem' }}></i>
+                              )}
+                              {sortConfig.field !== 'name' && (
+                                <i className="fas fa-sort" style={{ fontSize: '0.75rem', opacity: 0.3 }}></i>
+                              )}
+                            </div>
+                          </th>
+                          <th 
+                            className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 user-select-none"
+                            onClick={() => handleSort('status')}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div className="d-flex align-items-center gap-1">
+                              Status
+                              {sortConfig.field === 'status' && (
+                                <i className={`fas fa-sort-${sortConfig.direction === 'asc' ? 'up' : 'down'}`} style={{ fontSize: '0.75rem' }}></i>
+                              )}
+                              {sortConfig.field !== 'status' && (
+                                <i className="fas fa-sort" style={{ fontSize: '0.75rem', opacity: 0.3 }}></i>
+                              )}
+                            </div>
+                          </th>
+                          <th 
+                            className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 user-select-none"
+                            onClick={() => handleSort('timeIn')}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div className="d-flex align-items-center gap-1">
+                              Time In
+                              {sortConfig.field === 'timeIn' && (
+                                <i className={`fas fa-sort-${sortConfig.direction === 'asc' ? 'up' : 'down'}`} style={{ fontSize: '0.75rem' }}></i>
+                              )}
+                              {sortConfig.field !== 'timeIn' && (
+                                <i className="fas fa-sort" style={{ fontSize: '0.75rem', opacity: 0.3 }}></i>
+                              )}
+                            </div>
+                          </th>
+                          <th 
+                            className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 user-select-none"
+                            onClick={() => handleSort('timeOut')}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div className="d-flex align-items-center gap-1">
+                              Time Out
+                              {sortConfig.field === 'timeOut' && (
+                                <i className={`fas fa-sort-${sortConfig.direction === 'asc' ? 'up' : 'down'}`} style={{ fontSize: '0.75rem' }}></i>
+                              )}
+                              {sortConfig.field !== 'timeOut' && (
+                                <i className="fas fa-sort" style={{ fontSize: '0.75rem', opacity: 0.3 }}></i>
+                              )}
+                            </div>
+                          </th>
+                          <th 
+                            className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border cursor-pointer hover:bg-gray-200 user-select-none"
+                            onClick={() => handleSort('date')}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div className="d-flex align-items-center gap-1">
+                              Date
+                              {sortConfig.field === 'date' && (
+                                <i className={`fas fa-sort-${sortConfig.direction === 'asc' ? 'up' : 'down'}`} style={{ fontSize: '0.75rem' }}></i>
+                              )}
+                              {sortConfig.field !== 'date' && (
+                                <i className="fas fa-sort" style={{ fontSize: '0.75rem', opacity: 0.3 }}></i>
+                              )}
+                            </div>
+                          </th>
                           <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider border">Actions</th>
                         </tr>
                       </thead>
@@ -938,6 +1341,152 @@ const AttendancePage = () => {
                       </tbody>
                     </table>
                   )}
+
+                  {/* Important Notice Section - Collapsible */}
+                  <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-lg shadow-sm">
+                    <div 
+                      className="cursor-pointer d-flex align-items-center justify-content-between"
+                      onClick={() => setShowImportantNotice(!showImportantNotice)}
+                    >
+                      <h3 className="text-lg font-bold text-blue-800 mb-0 d-flex align-items-center gap-2">
+                        <i className="fas fa-info-circle"></i>
+                        Important Notice: Attendance & Payroll Rules
+                      </h3>
+                      <i className={`fas fa-chevron-${showImportantNotice ? 'up' : 'down'} text-blue-600`}></i>
+                    </div>
+                    
+                    {showImportantNotice && (
+                      <div className="space-y-4 mt-3">
+                        {/* ✅ FIX ISSUE #2: Updated Work Hours & Lunch Break Notice */}
+                        <div className="bg-orange-50 p-3 rounded-md border border-orange-300">
+                          <h4 className="font-semibold text-orange-800 mb-2 d-flex align-items-center gap-1">
+                            <i className="fas fa-clock text-sm"></i>
+                            ⏰ Standard Work Hours & Lunch Break
+                          </h4>
+                          <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 ml-2">
+                            <li><strong>Standard Shift:</strong> 8:00 AM to 5:00 PM (9 hours total)</li>
+                            <li><strong>Paid Hours:</strong> Only <strong>8 hours</strong> are counted as regular work</li>
+                            <li><strong>Lunch Break (12:00 NN - 12:59 PM):</strong> <span className="text-red-600 font-bold">NOT INCLUDED</span> in the 8-hour computation</li>
+                            <li><strong>Formula:</strong> Total Time - Lunch Break = Paid Hours</li>
+                            <li><strong>Example:</strong> 8:00 AM - 5:00 PM = 9hrs - 1hr lunch = <strong>8 hours paid</strong></li>
+                          </ul>
+                        </div>
+
+                        {/* Salary Computation */}
+                        <div className="bg-white p-3 rounded-md border border-blue-200">
+                          <h4 className="font-semibold text-blue-700 mb-2 d-flex align-items-center gap-1">
+                            <i className="fas fa-calculator text-sm"></i>
+                            Salary Computations
+                          </h4>
+                          <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 ml-2">
+                            <li><strong>Hourly Rate:</strong> Daily Rate ÷ 8 hours (₱{salaryRate.hourlyRate.toFixed(2)}/hr)</li>
+                            <li><strong>Overtime Rate:</strong> Hourly Rate × 1.25 = ₱{salaryRate.overtimeRate.toFixed(2)}/hr</li>
+                            <li><strong>Half-Day Pay:</strong> Variable (4 to &lt;6.5 hours worked)</li>
+                            <li><strong>Full-Day Pay:</strong> Daily Rate (6.5-8 hours worked)</li>
+                            <li><strong>Overtime Pay:</strong> Full Day + OT Rate × OT hours (&gt;6.5 hrs + after 5PM)</li>
+                            <li><strong>Invalid Attendance:</strong> No pay (less than 4 hours worked)</li>
+                          </ul>
+                        </div>
+
+                        {/* ✅ FIX ISSUE #2: Updated Half-Day Pay Clarification with Dynamic Rates */}
+                        <div className="bg-yellow-50 p-3 rounded-md border border-yellow-300">
+                          <h4 className="font-semibold text-yellow-800 mb-2 d-flex align-items-center gap-1">
+                            <i className="fas fa-coins text-sm"></i>
+                            💰 Half-Day Variable Pay Explained
+                          </h4>
+                          <p className="text-sm text-gray-700 mb-2">
+                            <strong>Half-Day status applies to 4 to &lt;6.5 hours worked, pay varies by actual hours:</strong>
+                          </p>
+                          <ul className="list-disc list-inside space-y-1 text-xs text-gray-700 ml-2">
+                            <li><strong>4 hours:</strong> Half-Day Base = ₱{(salaryRate.dailyRate / 2).toFixed(2)} (Daily ₱{salaryRate.dailyRate.toFixed(2)} ÷ 2)</li>
+                            <li><strong>5 hours:</strong> Half-Day + 1hr = ₱{(salaryRate.dailyRate / 2).toFixed(2)} + ₱{salaryRate.hourlyRate.toFixed(2)} = <strong>₱{((salaryRate.dailyRate / 2) + salaryRate.hourlyRate).toFixed(2)}</strong></li>
+                            <li><strong>6 hours:</strong> Half-Day + 2hrs = ₱{(salaryRate.dailyRate / 2).toFixed(2)} + ₱{(salaryRate.hourlyRate * 2).toFixed(2)} = <strong>₱{((salaryRate.dailyRate / 2) + (salaryRate.hourlyRate * 2)).toFixed(2)}</strong></li>
+                            <li><strong>6.25 hours:</strong> Half-Day + 2.25hrs = ₱{(salaryRate.dailyRate / 2).toFixed(2)} + ₱{(salaryRate.hourlyRate * 2.25).toFixed(2)} = <strong>₱{((salaryRate.dailyRate / 2) + (salaryRate.hourlyRate * 2.25)).toFixed(2)}</strong></li>
+                          </ul>
+                          <p className="text-xs text-gray-600 italic mt-2">
+                            <i className="fas fa-lightbulb text-yellow-600 mr-1"></i>
+                            <strong>Note:</strong> Same "Half-Day" status, but different pay based on actual hours worked. Once ≥6.5 hrs, it becomes "Full Day" status.
+                          </p>
+                        </div>
+
+                        {/* Status Meanings */}
+                        <div className="bg-white p-3 rounded-md border border-blue-200">
+                          <h4 className="font-semibold text-blue-700 mb-2 d-flex align-items-center gap-1">
+                            <i className="fas fa-tags text-sm"></i>
+                            📋 Status Definitions
+                          </h4>
+                          <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 ml-2">
+                            <li><strong>Present:</strong> Employee clocked in only (no clock out yet)</li>
+                            <li><strong>Invalid:</strong> Worked &lt;4 hours (0% pay - No Pay)</li>
+                            <li><strong>Half-Day:</strong> Worked 4 to &lt;6.5 hours (variable pay by exact hours)</li>
+                            <li><strong>Full-Day:</strong> Worked 6.5-8 hours (100% daily rate)</li>
+                            <li><strong>Overtime:</strong> Worked &gt;6.5 hrs + timed out after 5PM (Full pay + OT rate)</li>
+                            <li><strong>Absent:</strong> No time-in record for the day (0% pay)</li>
+                          </ul>
+                          <p className="text-xs text-gray-600 italic mt-2">
+                            <i className="fas fa-info-circle text-blue-600 mr-1"></i>
+                            <strong>Note:</strong> Grace period 8:00-9:30 AM allows Full Day eligibility if ≥6.5 hours worked.
+                          </p>
+                        </div>
+
+                        {/* ✅ FIX ISSUE #2: Overtime Eligibility Rules */}
+                        <div className="bg-purple-50 p-3 rounded-md border border-purple-300">
+                          <h4 className="font-semibold text-purple-800 mb-2 d-flex align-items-center gap-1">
+                            <i className="fas fa-clock text-sm"></i>
+                            ⚡ Overtime Eligibility Requirements
+                          </h4>
+                          <p className="text-sm text-gray-700 mb-2">
+                            <strong>Overtime pay (₱{salaryRate.overtimeRate.toFixed(2)}/hr) requires ALL conditions:</strong>
+                          </p>
+                          <ul className="list-disc list-inside space-y-1 text-xs text-gray-700 ml-2">
+                            <li><strong>✅ Work &gt;8 hours total:</strong> Overtime hours = hours beyond 8 (excluding lunch)</li>
+                            <li><strong>✅ Minimum 6.5 hours worked:</strong> Must work at least <span className="text-purple-600 font-bold">6hrs 30min</span> to be eligible for OT</li>
+                            <li><strong>✅ Time-out after 5:00 PM:</strong> Must work past 5:00 PM for overtime eligibility</li>
+                            <li><strong>✅ Manual time-out required:</strong> Must manually clock out (not auto time-out at 8 PM)</li>
+                            <li><strong>❌ Auto time-out = NO OT:</strong> Employees who get auto-closed at 8:00 PM receive NO overtime pay</li>
+                            <li><strong>❌ Less than 6.5 hours:</strong> Even if work past 5PM, no OT eligibility if &lt;6.5hrs total</li>
+                          </ul>
+                          <p className="text-xs text-gray-600 italic mt-2">
+                            <i className="fas fa-info-circle text-purple-600 mr-1"></i>
+                            <strong>Examples:</strong> 
+                            <br/>• 8AM-5PM exactly (8 hrs) = Full Day only, no OT (didn't work past 5PM)
+                            <br/>• 8AM-6PM (9 hrs) = Full Day + 1hr OT pay ✅
+                            <br/>• 2PM-8PM auto time-out (6 hrs) = Half Day, NO OT (6.5hrs minimum not met + auto time-out) ❌
+                            <br/>• 2PM-8PM manual time-out (6 hrs) = Half Day, NO OT (6.5hrs minimum not met) ❌
+                            <br/>• 10AM-7PM (8 hrs) = Full Day + 1hr OT pay (worked past 5PM + manual time-out) ✅
+                          </p>
+                        </div>
+
+                        {/* Critical Rules */}
+                        <div className="bg-white p-3 rounded-md border border-red-200">
+                          <h4 className="font-semibold text-red-700 mb-2 d-flex align-items-center gap-1">
+                            <i className="fas fa-exclamation-triangle text-sm"></i>
+                            Critical Attendance Rules
+                          </h4>
+                          <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 ml-2">
+                            <li><strong>⏰ Time-In Cutoff:</strong> ❌ Cannot time-in after <span className="text-red-600 font-bold">4:00 PM</span> (will be rejected)</li>
+                            <li><strong>🕗 Auto Time-Out:</strong> All present employees automatically time-out at <span className="text-blue-600 font-bold">8:00 PM</span> (no overtime pay for auto time-out)</li>
+                            <li><strong>One Time-In Per Day:</strong> Employees can only clock in once per day</li>
+                            <li><strong>Duplicate Time-In:</strong> Second time-in attempt will be marked as "Invalid"</li>
+                            <li><strong>Minimum Work Hours:</strong> At least 4 hours required for pay eligibility</li>
+                            <li><strong>Time-Out Required:</strong> Must manually clock out before 8:00 PM to be eligible for overtime</li>
+                            <li><strong>Payroll Calculation:</strong> Based on actual time-in and time-out records only</li>
+                            <li><strong>Lunch Break Exclusion:</strong> 12:00-12:59 PM is automatically excluded from paid hours</li>
+                          </ul>
+                        </div>
+
+                        {/* Important Notes */}
+                        <div className="bg-yellow-50 p-3 rounded-md border border-yellow-300">
+                          <p className="text-xs text-gray-600 italic">
+                            <i className="fas fa-lightbulb text-yellow-600 mr-1"></i>
+                            <strong>Note:</strong> All time calculations are system-generated based on biometric attendance records. 
+                            Manual adjustments require admin approval. Salary deductions (Cash Advance, SSS, PhilHealth, Pag-IBIG) 
+                            are applied after gross salary calculation.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

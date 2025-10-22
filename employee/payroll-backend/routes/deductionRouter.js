@@ -6,7 +6,11 @@ const router = express.Router();
 // GET all deductions
 router.get('/', async (req, res) => {
   try {
-    const deductions = await Deduction.find().populate('employee', 'firstName lastName email employeeId salary');
+    // ✅ PERFORMANCE FIX: Optimized query with lean() and select
+    const deductions = await Deduction.find()
+      .populate('employee', 'firstName lastName email employeeId salary')
+      .select('-__v') // Exclude version key
+      .lean(); // Use lean() for faster queries
     res.json(deductions);
   } catch (err) {
     res.status(500).json({ message: err.message });

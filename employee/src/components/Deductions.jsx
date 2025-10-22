@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { getAllDeductions, createDeduction, deleteDeduction, updateDeduction } from "../services/deductionService";
+import { getAllDeductions, getArchivedDeductions, createDeduction, deleteDeduction, updateDeduction } from "../services/deductionService";
 import { getAllEmployees } from "../services/employeeService";
+import { getCurrentSalaryRate } from "../services/salaryRateService"; // ✅ FIX ISSUE #2: Import salary rate service
 import { logger } from '../utils/logger';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
+import './Admin.responsive.css';
 
 // Status Badge Component
 const StatusBadge = ({ status }) => {
@@ -53,6 +55,9 @@ const Deduction = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [archivedDeductions, setArchivedDeductions] = useState([]);
+  const [currentSalaryRate, setCurrentSalaryRate] = useState(null); // ✅ FIX ISSUE #2: Store current rate with maxCashAdvance
+  const [showImportantNotice, setShowImportantNotice] = useState(false); // ✅ FIX ISSUE #2: Toggle for Important Notice
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
   // New filter states
   const [filterType, setFilterType] = useState(''); // 'week', 'month', 'year'
@@ -76,29 +81,55 @@ const Deduction = () => {
   useEffect(() => {
     fetchDeductions();
     fetchEmployees();
+    fetchSalaryRate(); // ✅ FIX ISSUE #2: Fetch current salary rate
   }, []);
 
-  const fetchDeductions = async () => {
+  // ✅ FIX ISSUE #2: Fetch current salary rate
+  const fetchSalaryRate = async () => {
+    try {
+      const rate = await getCurrentSalaryRate();
+      logger.info('✅ Current salary rate fetched:', rate);
+      setCurrentSalaryRate(rate);
+    } catch (error) {
+      logger.error('❌ Error fetching salary rate:', error);
+      // Set default if fetch fails
+      setCurrentSalaryRate({
+        dailyRate: 550,
+        maxCashAdvance: 1100
+      });
+    }
+  };
+
+  const fetchDeductions = async (bypassCache = false) => {
     try {
       setLoading(true);
-      const data = await getAllDeductions();
+      
+      // ✅ FIX ISSUE #1 & #4: Fetch active and archived records separately
+      // bypassCache forces fresh data fetch (no browser/axios caching)
+      const [activeData, archivedData] = await Promise.all([
+        getAllDeductions(bypassCache), // Gets only active records (archived != true)
+        getArchivedDeductions(bypassCache) // Gets only archived records (archived == true)
+      ]);
       
       // ✅ FIX: Validate that data is an array
-      if (!Array.isArray(data)) {
-        logger.error('❌ getAllDeductions did not return an array:', data);
-        throw new Error('Invalid data format received from server');
+      if (!Array.isArray(activeData)) {
+        logger.error('❌ getAllDeductions did not return an array:', activeData);
+        throw new Error('Invalid active data format received from server');
       }
       
-      // Separate active and archived deductions
-      const active = data.filter(deduction => !deduction.archived);
-      const archived = data.filter(deduction => deduction.archived);
+      if (!Array.isArray(archivedData)) {
+        logger.error('❌ getArchivedDeductions did not return an array:', archivedData);
+        throw new Error('Invalid archived data format received from server');
+      }
       
-      setDeductions(active);
-      setArchivedDeductions(archived);
+      setDeductions(activeData);
+      setArchivedDeductions(archivedData);
       setError(null);
       
+      logger.info(`✅ Fetched ${activeData.length} active and ${archivedData.length} archived cash advances${bypassCache ? ' (cache bypassed)' : ''}`);
+      
       // Extract available years from deduction data
-      extractAvailableYears(active);
+      extractAvailableYears(activeData);
     } catch (err) {
       logger.error('❌ Error fetching deductions:', err);
       setError(err.message || 'Failed to fetch deductions. Please make sure MongoDB is running.');
@@ -479,10 +510,78 @@ const Deduction = () => {
         setLoading(false);
         return;
       }
-      if (amtVal > 1100) {
-        setError('Cash advance amount cannot exceed ₱1,100 (2 days salary).');
+      
+      // ✅ FIX ISSUE #2: Validate against current maxCashAdvance (2x daily rate)
+      const maxAllowed = currentSalaryRate?.maxCashAdvance || 1100; // Fallback to 1100
+      if (amtVal > maxAllowed) {
+        setError(`Cash advance amount cannot exceed ₱${maxAllowed.toLocaleString()} (2 days × ₱${currentSalaryRate?.dailyRate || 550} daily rate).`);
         setLoading(false);
         return;
+      }
+      
+      // ✅ NEW FIX: Check if employee has worked at least 2 full days this week
+      if (formData.employee) {
+        try {
+          // Get current week range (Monday - Saturday)
+          const today = new Date();
+          const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+          
+          // Calculate Monday of current week
+          const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+          const monday = new Date(today);
+          monday.setDate(today.getDate() - daysFromMonday);
+          monday.setHours(0, 0, 0, 0);
+          
+          // Calculate Saturday of current week
+          const saturday = new Date(monday);
+          saturday.setDate(monday.getDate() + 5);
+          saturday.setHours(23, 59, 59, 999);
+          
+          // Fetch attendance records for current week
+          const attendanceResponse = await fetch(
+            `/api/attendance?employeeId=${formData.employee}&startDate=${monday.toISOString()}&endDate=${saturday.toISOString()}`
+          );
+          
+          if (attendanceResponse.ok) {
+            const attendanceData = await attendanceResponse.json();
+            const attendanceRecords = Array.isArray(attendanceData) ? attendanceData : (attendanceData.data || attendanceData.attendance || []);
+            
+            // Count Full Day records (dayType === 'Full Day')
+            const fullDayCount = attendanceRecords.filter(record => 
+              record.dayType === 'Full Day' && new Date(record.date).getDay() !== 0 // Exclude Sunday
+            ).length;
+            
+            if (fullDayCount < 2) {
+              setError(`Cash advance requires at least 2 full-days of work this week. Employee has only ${fullDayCount} full-day(s) so far.`);
+              setLoading(false);
+              return;
+            }
+          }
+          
+          // ✅ NEW FIX: Check if employee already received cash advance this week (once per week limit)
+          const existingAdvancesResponse = await fetch(
+            `/api/deductions?employeeId=${formData.employee}&startDate=${monday.toISOString()}&endDate=${saturday.toISOString()}`
+          );
+          
+          if (existingAdvancesResponse.ok) {
+            const existingAdvancesData = await existingAdvancesResponse.json();
+            const existingAdvances = Array.isArray(existingAdvancesData) ? existingAdvancesData : (existingAdvancesData.data || []);
+            
+            // Check if any Advance type exists this week
+            const hasAdvanceThisWeek = existingAdvances.some(record => 
+              record.type === 'Advance' && record.employee === formData.employee
+            );
+            
+            if (hasAdvanceThisWeek) {
+              setError('Employee already received a cash advance this week. Only one cash advance allowed per week.');
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (checkError) {
+          logger.error('Error checking cash advance eligibility:', checkError);
+          // Continue with submission if check fails (graceful degradation)
+        }
       }
       
       const submissionData = {
@@ -550,13 +649,22 @@ const Deduction = () => {
       try {
         setLoading(true);
         
-        // UPDATE deduction record to mark as archived
-        await updateDeduction(id, {
-          archived: true
+        // Call PATCH /api/cash-advance/:id/archive endpoint
+        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/cash-advance/${id}/archive`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          }
         });
 
-        // Refresh the list
-        await fetchDeductions();
+        const result = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(result.message || 'Archive failed');
+        }
+
+        // ✅ FIX ISSUE #4: Bypass cache to force fresh data fetch
+        await fetchDeductions(true); // true = bypass cache
         setError(null);
         alert('Cash advance record archived successfully!');
         
@@ -582,13 +690,22 @@ const Deduction = () => {
       try {
         setLoading(true);
         
-        // UPDATE deduction record to mark as not archived
-        await updateDeduction(id, {
-          archived: false
+        // Call PATCH /api/cash-advance/:id/restore endpoint
+        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/cash-advance/${id}/restore`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          }
         });
 
-        // Refresh the list
-        await fetchDeductions();
+        const result = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(result.message || 'Restore failed');
+        }
+
+        // ✅ FIX ISSUE #4: Bypass cache to force fresh data fetch
+        await fetchDeductions(true); // true = bypass cache
         setError(null);
         alert('Cash advance record restored successfully!');
         
@@ -638,20 +755,32 @@ const Deduction = () => {
   );
 
   return (
-    <div className="d-flex" style={{ minHeight: '100vh', background: '#f8f9fb' }}>
-      <AdminSidebar />
-      
-      {/* Main Content - WITH MARGIN FOR FIXED SIDEBAR */}
-      <div 
-        className="flex-1 overflow-auto" 
-        style={{ 
-          marginLeft: '280px',
-          width: 'calc(100% - 280px)'
-        }}
+    <div className="admin-page-wrapper">
+      {/* Mobile Hamburger Menu */}
+      <button
+        className="hamburger-menu-button"
+        onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+        aria-label="Toggle Menu"
       >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      {/* Mobile Sidebar Overlay */}
+      <div 
+        className={`mobile-sidebar-overlay ${isMobileSidebarOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileSidebarOpen(false)}
+      />
+
+      {/* Admin Sidebar */}
+      <AdminSidebar isMobileOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
+
+      {/* Main Content */}
+      <div className="admin-main-content">
         <AdminHeader />
         
-        <div className="p-4">
+        <div className="admin-content-area">
           <div className="card shadow-sm mb-4" style={{ borderRadius: '15px', border: 'none' }}>
             
             {/* Header bar */}
@@ -680,7 +809,10 @@ const Deduction = () => {
                     color: '#ffffff', 
                     padding: '10px 20px', 
                     fontSize: '1rem',
-                    borderRadius: '8px'
+                    borderRadius: '8px',
+                    flex: '0 0 auto',
+                    width: 'auto',
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   <i className="fas fa-plus me-2"></i>Cash Advance
@@ -782,13 +914,105 @@ const Deduction = () => {
                     color: '#ffffff', 
                     padding: '10px 20px', 
                     fontSize: '1rem',
-                    borderRadius: '8px'
+                    borderRadius: '8px',
+                    flex: '0 0 auto',
+                    width: 'auto',
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   <i className="fas fa-archive me-2"></i>
                   {showArchived ? 'Back to Main' : 'View Archive'}
                 </button>
               </div>
+
+              {/* ✅ FIX ISSUE #2: Important Notice Section - Cash Advance Rate Information */}
+              {currentSalaryRate && (
+                <div className="mt-4 mb-4">
+                  <div 
+                    className="d-flex align-items-center justify-content-between p-3 rounded"
+                    style={{
+                      backgroundColor: '#e3f2fd',
+                      border: '1px solid #90caf9',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onClick={() => setShowImportantNotice(!showImportantNotice)}
+                  >
+                    <div className="d-flex align-items-center gap-2">
+                      <i className="fas fa-info-circle text-primary" style={{ fontSize: '1.5rem' }}></i>
+                      <h3 className="mb-0 fw-bold text-primary" style={{ fontSize: '1.1rem' }}>
+                        Important Notice - Cash Advance Guidelines
+                      </h3>
+                    </div>
+                    <i className={`fas fa-chevron-${showImportantNotice ? 'up' : 'down'} text-primary`}></i>
+                  </div>
+
+                  {showImportantNotice && (
+                    <div 
+                      className="p-4 mt-2 rounded"
+                      style={{
+                        backgroundColor: '#f5f5f5',
+                        border: '1px solid #e0e0e0'
+                      }}
+                    >
+                      <div className="row">
+                        <div className="col-md-6">
+                          <h4 className="fw-bold text-dark mb-3" style={{ fontSize: '1rem' }}>
+                            <i className="fas fa-dollar-sign text-success me-2"></i>
+                            Current Cash Advance Rate
+                          </h4>
+                          <div className="ps-4">
+                            <p className="mb-2">
+                              <span className="fw-semibold">Daily Rate:</span>{' '}
+                              <span className="text-primary fw-bold" style={{ fontSize: '1.1rem' }}>
+                                ₱{currentSalaryRate.dailyRate?.toLocaleString() || '550'}
+                              </span>
+                            </p>
+                            <p className="mb-2">
+                              <span className="fw-semibold">Maximum Cash Advance:</span>{' '}
+                              <span className="text-success fw-bold" style={{ fontSize: '1.2rem' }}>
+                                ₱{currentSalaryRate.maxCashAdvance?.toLocaleString() || '1,100'}
+                              </span>
+                              <br />
+                              <small className="text-muted">
+                                (2 days × ₱{currentSalaryRate.dailyRate?.toLocaleString() || '550'})
+                              </small>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="col-md-6">
+                          <h4 className="fw-bold text-dark mb-3" style={{ fontSize: '1rem' }}>
+                            <i className="fas fa-exclamation-triangle text-warning me-2"></i>
+                            Cash Advance Rules
+                          </h4>
+                          <ul className="ps-4" style={{ lineHeight: '1.8' }}>
+                            <li>
+                              <span className="fw-semibold">Maximum Amount:</span> Cannot exceed{' '}
+                              <span className="text-danger fw-bold">
+                                ₱{currentSalaryRate.maxCashAdvance?.toLocaleString() || '1,100'}
+                              </span>
+                            </li>
+                            <li>
+                              <span className="fw-semibold">Frequency:</span> Only{' '}
+                              <span className="text-danger fw-bold">one cash advance per week</span> per employee
+                            </li>
+                            <li>
+                              <span className="fw-semibold">Deduction:</span> Automatically deducted from payroll
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="alert alert-info mt-3 mb-0" style={{ backgroundColor: '#e3f2fd', border: '1px solid #90caf9' }}>
+                        <i className="fas fa-calculator me-2"></i>
+                        <span className="fw-semibold">Net Salary Calculation:</span>{' '}
+                        Gross Pay - SSS - PhilHealth - PAG-IBIG - Cash Advances = Net Salary
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Body content */}

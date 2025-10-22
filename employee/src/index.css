@@ -1,9 +1,4 @@
-.login-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh; /* Full viewport height */
-}
+/* Removed old login-container - using login-wrapper in Login.responsive.css */
 
 /* Global table borders to match Employee List */
 table {
@@ -19,4 +14,33 @@ table td {
 
 table thead th {
   font-weight: bold;
+}
+
+/* GLOBAL FIX: Override ALL inline overflow:hidden on table containers */
+[style*="overflow"][style*="hidden"]:has(table) {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* Ensure tables in containers are scrollable */
+div:has(> table) {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  width: 100% !important;
+  display: block !important;
+}
+
+/* Force all tables to have minimum width for scrolling */
+.employee-content-wrapper table,
+.employee-dashboard-container table {
+  min-width: 800px !important;
+  width: 100% !important;
+  display: table !important;
+}
+
+/* Prevent table cell content from wrapping */
+.employee-content-wrapper table th,
+.employee-content-wrapper table td {
+  white-space: nowrap !important;
 }

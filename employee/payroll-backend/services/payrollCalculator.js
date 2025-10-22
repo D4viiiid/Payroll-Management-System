@@ -4,6 +4,7 @@ import AttendanceModel from '../models/AttendanceModels.js';
 import MandatoryDeduction from '../models/MandatoryDeduction.model.js';
 import CashAdvance from '../models/CashAdvance.model.js';
 import EnhancedPayroll from '../models/EnhancedPayroll.model.js';
+import SalaryRate from '../models/SalaryRate.model.js';
 import { 
   validateAndCalculateAttendance, 
   calculateAttendanceSummary as calcAttendanceSummary 
@@ -93,14 +94,21 @@ export const determineAttendanceStatus = (timeIn) => {
 
 /**
  * Get attendance summary for employee in pay period
- * Updated to use Phase 2 enhanced attendance validation
+ * Updated to use Phase 2 enhanced attendance validation and CURRENT SALARY RATE
  */
 export const getAttendanceSummary = async (employeeId, startDate, endDate) => {
-  // Fetch employee details for salary rates
+  // Fetch employee details
   const employee = await Employee.findById(employeeId);
   if (!employee) {
     throw new Error('Employee not found');
   }
+
+  // ✅ FIX: Get current salary rate from SalaryRate collection
+  const currentRate = await SalaryRate.getCurrentRate();
+  const dailyRate = currentRate.dailyRate;
+  const overtimeRate = currentRate.overtimeRate;
+
+  console.log(`📊 Using current salary rate for payroll: Daily=₱${dailyRate}, OT=₱${overtimeRate}`);
 
   // Fetch attendance records
   const attendances = await AttendanceModel.find({
@@ -132,13 +140,13 @@ export const getAttendanceSummary = async (employeeId, startDate, endDate) => {
     _id: att._id
   }));
 
-  // Use the new attendance calculator
+  // Use the new attendance calculator with CURRENT SALARY RATE
   const { summary, processedRecords } = calcAttendanceSummary(attendanceRecords, {
-    dailyRate: employee.dailyRate || 550,
-    overtimeRate: employee.overtimeRate || 85.94
+    dailyRate: dailyRate,
+    overtimeRate: overtimeRate
   });
 
-  // Update attendance records in database with calculated values
+  // Update attendance records in database with calculated values using CURRENT RATE
   for (const processed of processedRecords) {
     if (processed._id) {
       await AttendanceModel.findByIdAndUpdate(processed._id, {
@@ -170,22 +178,34 @@ export const getAttendanceSummary = async (employeeId, startDate, endDate) => {
 };
 
 /**
- * Calculate basic salary
+ * Calculate basic salary using CURRENT SALARY RATE
  */
-export const calculateBasicSalary = (employee, workDays, halfDays) => {
-  const dailyRate = employee.dailyRate || 550;
+export const calculateBasicSalary = async (workDays, halfDays) => {
+  // ✅ FIX: Get current salary rate from database
+  const currentRate = await SalaryRate.getCurrentRate();
+  const dailyRate = currentRate.dailyRate;
+  
   const fullDaySalary = workDays * dailyRate;
   const halfDaySalary = halfDays * (dailyRate / 2);
+  
+  console.log(`💰 Basic Salary: ${workDays} full days + ${halfDays} half days @ ₱${dailyRate}/day = ₱${fullDaySalary + halfDaySalary}`);
   
   return Math.round((fullDaySalary + halfDaySalary) * 100) / 100;
 };
 
 /**
- * Calculate overtime pay
+ * Calculate overtime pay using CURRENT SALARY RATE
  */
-export const calculateOvertimePay = (employee, overtimeHours) => {
-  const overtimeRate = employee.overtimeRate || 85.94;
-  return Math.round(overtimeHours * overtimeRate * 100) / 100;
+export const calculateOvertimePay = async (overtimeHours) => {
+  // ✅ FIX: Get current salary rate from database
+  const currentRate = await SalaryRate.getCurrentRate();
+  const overtimeRate = currentRate.overtimeRate;
+  
+  const overtimePay = overtimeHours * overtimeRate;
+  
+  console.log(`⏰ Overtime Pay: ${overtimeHours} hrs @ ₱${overtimeRate}/hr = ₱${overtimePay}`);
+  
+  return Math.round(overtimePay * 100) / 100;
 };
 
 /**
@@ -265,6 +285,7 @@ export const getEmployeeYTD = async (employeeId, year = new Date().getFullYear()
 
 /**
  * 🎯 MAIN FUNCTION: Calculate complete payroll for employee
+ * Uses CURRENT SALARY RATE from SalaryRate collection
  */
 export const calculateEmployeePayroll = async (employeeId, startDate, endDate) => {
   try {
@@ -279,18 +300,17 @@ export const calculateEmployeePayroll = async (employeeId, startDate, endDate) =
       throw new Error('Payroll cutoff must be on Sunday');
     }
     
-    // 3. Get attendance summary
+    // 3. Get attendance summary (this now uses current salary rate)
     const attendanceSummary = await getAttendanceSummary(employeeId, startDate, endDate);
     
-    // 4. Calculate basic salary
-    const basicSalary = calculateBasicSalary(
-      employee,
+    // 4. Calculate basic salary (this now fetches current rate)
+    const basicSalary = await calculateBasicSalary(
       attendanceSummary.workDays,
       attendanceSummary.halfDays
     );
     
-    // 5. Calculate overtime pay
-    const overtimePay = calculateOvertimePay(employee, attendanceSummary.overtimeHours);
+    // 5. Calculate overtime pay (this now fetches current rate)
+    const overtimePay = await calculateOvertimePay(attendanceSummary.overtimeHours);
     
     // 6. Calculate gross salary
     const grossSalary = calculateGrossSalary(basicSalary, overtimePay);
@@ -315,7 +335,12 @@ export const calculateEmployeePayroll = async (employeeId, startDate, endDate) =
     const currentYTD = await getEmployeeYTD(employeeId, endDate.getFullYear());
     const newYTD = currentYTD + netSalary;
     
-    // 12. Create payroll object
+    // 12. Get current salary rate for reference
+    const currentRate = await SalaryRate.getCurrentRate();
+    
+    console.log(`✅ Payroll calculated for ${employee.firstName} ${employee.lastName}: Net Pay = ₱${netSalary}`);
+    
+    // 13. Create payroll object
     const payrollData = {
       employee: employeeId,
       payPeriod: {
@@ -335,7 +360,14 @@ export const calculateEmployeePayroll = async (employeeId, startDate, endDate) =
       totalDeductions,
       netSalary,
       yearToDate: newYTD,
-      status: 'Draft'
+      status: 'Draft',
+      // ✅ Store salary rate used for calculation
+      salaryRateUsed: {
+        dailyRate: currentRate.dailyRate,
+        hourlyRate: currentRate.hourlyRate,
+        overtimeRate: currentRate.overtimeRate,
+        effectiveDate: currentRate.effectiveDate
+      }
     };
     
     return {
@@ -355,10 +387,12 @@ export const calculateEmployeePayroll = async (employeeId, startDate, endDate) =
         grossSalary: `₱${grossSalary.toLocaleString()}`,
         totalDeductions: `₱${totalDeductions.toLocaleString()}`,
         netSalary: `₱${netSalary.toLocaleString()}`,
-        yearToDate: `₱${newYTD.toLocaleString()}`
+        yearToDate: `₱${newYTD.toLocaleString()}`,
+        salaryRateUsed: `₱${currentRate.dailyRate}/day (₱${currentRate.hourlyRate}/hr, ₱${currentRate.overtimeRate}/hr OT)`
       }
     };
   } catch (error) {
+    console.error('❌ Error calculating payroll:', error);
     return {
       success: false,
       error: error.message

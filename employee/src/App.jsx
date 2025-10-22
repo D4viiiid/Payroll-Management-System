@@ -13,6 +13,7 @@ import Logout from "./components/Logout";
 import EmployeeDashboard from "./components/EmployeeDashboard";
 import Salary from "./components/Salary";
 import Payslip from './components/Payslip';
+import AdminSettings from './components/AdminSettings';
 
 // Create router with future flags - Added v7_startTransition to remove warning
 const router = createBrowserRouter([
@@ -55,6 +56,10 @@ const router = createBrowserRouter([
   {
     path: "/salary",
     element: <Salary />
+  },
+  {
+    path: "/admin-settings",
+    element: <AdminSettings />
   }
 ], {
   future: {

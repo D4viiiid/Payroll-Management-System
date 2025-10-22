@@ -67,7 +67,14 @@ const CashAdvanceSchema = new mongoose.Schema({
     index: true
   },
   
-  // 👤 Approval Management
+  // �️ Archive Status
+  archived: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  
+  // �👤 Approval Management
   approvedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Employee'
@@ -171,10 +178,12 @@ const CashAdvanceSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// 📌 Indexes for better query performance
+// ✅ CRITICAL PERFORMANCE FIX: Comprehensive indexes for all query patterns
 CashAdvanceSchema.index({ employee: 1, status: 1 });
 CashAdvanceSchema.index({ status: 1, requestDate: -1 });
 CashAdvanceSchema.index({ 'paymentHistory.payrollId': 1 });
+CashAdvanceSchema.index({ archived: 1, requestDate: -1 }); // Archive filtering with date sort
+CashAdvanceSchema.index({ archived: 1, status: 1 }); // Archive + status queries
 
 // 🔄 Pre-save middleware to update status based on balance
 CashAdvanceSchema.pre('save', function(next) {

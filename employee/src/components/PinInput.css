@@ -1,0 +1,152 @@
+/* PIN Input Container */
+.pin-input-container {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  max-width: 450px;
+  margin: 0 auto;
+}
+
+/* Header */
+.pin-input-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.pin-input-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+}
+
+.pin-input-subtitle {
+  font-size: 0.9rem;
+  color: #7f8c8d;
+  margin: 0;
+}
+
+/* PIN Input Boxes */
+.pin-input-boxes {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+.pin-input-box {
+  width: 50px;
+  height: 60px;
+  font-size: 1.8rem;
+  text-align: center;
+  border: 2px solid #dfe6e9;
+  border-radius: 8px;
+  background: white;
+  transition: all 0.3s ease;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.pin-input-box:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  transform: scale(1.05);
+}
+
+.pin-input-box.filled {
+  border-color: #27ae60;
+  background: #f0fdf4;
+}
+
+.pin-input-box:disabled {
+  background: #f8f9fa;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Actions */
+.pin-input-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.pin-input-btn {
+  padding: 0.5rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.pin-input-btn-clear {
+  background: #95a5a6;
+  color: white;
+}
+
+.pin-input-btn-clear:hover:not(:disabled) {
+  background: #7f8c8d;
+  transform: translateY(-1px);
+}
+
+.pin-input-btn-cancel {
+  background: #e74c3c;
+  color: white;
+}
+
+.pin-input-btn-cancel:hover:not(:disabled) {
+  background: #c0392b;
+  transform: translateY(-1px);
+}
+
+.pin-input-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Loading State */
+.pin-input-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+/* Responsive Design */
+@media (max-width: 576px) {
+  .pin-input-container {
+    padding: 1.5rem;
+  }
+
+  .pin-input-boxes {
+    gap: 0.5rem;
+  }
+
+  .pin-input-box {
+    width: 40px;
+    height: 50px;
+    font-size: 1.5rem;
+  }
+
+  .pin-input-title {
+    font-size: 1.25rem;
+  }
+
+  .pin-input-actions {
+    flex-direction: column;
+  }
+
+  .pin-input-btn {
+    width: 100%;
+  }
+}

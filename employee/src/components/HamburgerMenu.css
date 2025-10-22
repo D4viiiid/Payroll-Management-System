@@ -1,0 +1,107 @@
+/* ================================================
+   HAMBURGER MENU COMPONENT STYLES
+   Mobile-first hamburger menu with smooth animations
+   ================================================ */
+
+.hamburger-menu {
+  display: none; /* Hidden by default, shown on mobile via media queries */
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  z-index: 2000;
+  width: 45px;
+  height: 45px;
+  background: #f06a98;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 10px;
+  box-shadow: 0 4px 12px rgba(240, 106, 152, 0.3);
+  transition: all 0.3s ease;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.hamburger-menu:hover {
+  background: #d95683;
+  box-shadow: 0 6px 16px rgba(240, 106, 152, 0.4);
+  transform: scale(1.05);
+}
+
+.hamburger-menu:active {
+  transform: scale(0.95);
+}
+
+.hamburger-menu:focus {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Hamburger lines */
+.hamburger-line {
+  display: block;
+  width: 25px;
+  height: 3px;
+  background-color: white;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+  transform-origin: center;
+}
+
+/* Animate to X when open */
+.hamburger-menu.open .hamburger-line:nth-child(1) {
+  transform: translateY(8px) rotate(45deg);
+}
+
+.hamburger-menu.open .hamburger-line:nth-child(2) {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.hamburger-menu.open .hamburger-line:nth-child(3) {
+  transform: translateY(-8px) rotate(-45deg);
+}
+
+/* ================================================
+   RESPONSIVE BREAKPOINTS
+   ================================================ */
+
+/* Mobile: Show hamburger menu */
+@media (max-width: 767px) {
+  .hamburger-menu {
+    display: flex;
+  }
+}
+
+/* Tablet and up: Hide hamburger menu */
+@media (min-width: 768px) {
+  .hamburger-menu {
+    display: none !important;
+  }
+}
+
+/* ================================================
+   ACCESSIBILITY
+   ================================================ */
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .hamburger-menu {
+    border: 2px solid white;
+  }
+
+  .hamburger-line {
+    background-color: white;
+    height: 4px;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .hamburger-menu,
+  .hamburger-line {
+    transition: none !important;
+  }
+}

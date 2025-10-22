@@ -66,21 +66,29 @@ export const autoCloseOpenShifts = async () => {
       try {
         // Check if shift should be auto-closed
         if (shouldAutoCloseShift(shift.timeIn)) {
-          // Calculate auto-close time (timeIn + MAX_SHIFT_HOURS)
-          const autoCloseTime = calculateAutoCloseTime(shift.timeIn);
+          // ✅ FIX ISSUE #1: Auto-close should set timeout to 5:00 PM (not actual time)
+          // This prevents employees from receiving overtime pay if they forgot to clock out
+          // Even though the auto-close runs at 8 PM, we set timeOut to 5:00 PM for calculation
           
-          console.log(`⏰ [Auto-Close] Closing shift for ${shift.employeeId}: ${formatTime(shift.timeIn)} -> ${formatTime(autoCloseTime)}`);
+          // Create 5:00 PM timeout on the shift's date
+          const fivePM = moment.tz(shift.date, TIMEZONE)
+            .hour(17)
+            .minute(0)
+            .second(0)
+            .millisecond(0);
+          
+          console.log(`⏰ [Auto-Close] Closing shift for ${shift.employeeId}: ${formatTime(shift.timeIn)} -> 5:00 PM (forced)`);
 
-          // Update the attendance record with auto-close time
-          shift.timeOut = autoCloseTime;
-          shift.notes = (shift.notes || '') + ` [Auto-closed after ${MAX_SHIFT_HOURS} hours]`;
+          // Update the attendance record with 5 PM timeout (NOT actual auto-close time)
+          shift.timeOut = fivePM.toDate();
+          shift.notes = (shift.notes || '') + ` [Auto-closed at 8 PM - timeout set to 5:00 PM. No overtime pay for automatic timeout.]`;
 
-          // Recalculate attendance with the new timeOut
+          // Recalculate attendance with the new timeOut (5 PM)
           const employee = await Employee.findOne({ employeeId: shift.employeeId });
           if (employee) {
             const calculation = await validateAndCalculateAttendance(
               shift.timeIn,
-              autoCloseTime,
+              fivePM.toDate(),
               shift.date,
               employee.dailyRate || 550
             );
@@ -93,7 +101,7 @@ export const autoCloseOpenShifts = async () => {
             shift.overtimePay = calculation.overtimePay;
             shift.totalPay = calculation.totalPay;
             shift.isValidDay = calculation.isValidDay;
-            shift.validationReason = calculation.validationReason + ' (Auto-closed)';
+            shift.validationReason = calculation.validationReason + ' (Auto-closed to 5 PM)';
 
             await shift.save();
 

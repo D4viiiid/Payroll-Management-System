@@ -9,7 +9,8 @@ import { logger } from '../utils/logger.js';
 
 /**
  * Middleware to track response times
- * Logs warnings for slow requests (>1000ms)
+ * Logs warnings for slow requests (>100ms)
+ * ✅ PERFORMANCE FIX: Reduced threshold from 1000ms to 100ms for aggressive monitoring
  */
 export const responseTimeMiddleware = (req, res, next) => {
   const start = Date.now();
@@ -21,8 +22,8 @@ export const responseTimeMiddleware = (req, res, next) => {
   res.end = function(...args) {
     const duration = Date.now() - start;
     
-    // Log slow requests
-    if (duration > 1000) {
+    // Log slow requests (>100ms is considered slow for optimal UX)
+    if (duration > 100) {
       logger.warn(`🐌 SLOW REQUEST: ${req.method} ${req.path} took ${duration}ms`);
     }
     

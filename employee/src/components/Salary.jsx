@@ -5,47 +5,38 @@ import { useDebounce } from '../utils/debounce';
 import { logger } from '../utils/logger';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
+import SalaryRateModal from './SalaryRateModal'; // ✅ Import the existing modal
+import './Admin.responsive.css';
 
-// Status Badge Component - Updated to show dayType instead of employee status
+// ✅ FIXED: Status Badge Component - Now handles both "Full Day" and "Full-day" formats
+// Uses inline conditional classes instead of dynamic class strings for Tailwind compatibility
 const StatusBadge = ({ dayType }) => {
-  const getStatusConfig = (dayType) => {
-    switch (dayType?.toLowerCase()) {
-      case 'full day':
-        return {
-          text: 'Full Day',
-          bgColor: 'bg-green-100',
-          textColor: 'text-green-800',
-          borderColor: 'border-green-200'
-        };
-      case 'half day':
-        return {
-          text: 'Half Day',
-          bgColor: 'bg-orange-100',
-          textColor: 'text-orange-800',
-          borderColor: 'border-orange-200'
-        };
-      case 'absent':
-        return {
-          text: 'Absent',
-          bgColor: 'bg-red-100',
-          textColor: 'text-red-800',
-          borderColor: 'border-red-200'
-        };
-      default:
-        return {
-          text: 'N/A',
-          bgColor: 'bg-gray-100',
-          textColor: 'text-gray-800',
-          borderColor: 'border-gray-200'
-        };
-    }
-  };
-
-  const config = getStatusConfig(dayType);
+  // Normalize status text for display and comparison
+  // Convert to lowercase and replace spaces with hyphens for consistent matching
+  const normalizedType = dayType?.toLowerCase().replace(/\s+/g, '-');
+  
+  // Determine display text
+  let displayText = dayType || 'N/A';
+  if (normalizedType === 'half-day' || normalizedType === 'halfday') displayText = 'Half Day';
+  else if (normalizedType === 'full-day' || normalizedType === 'fullday') displayText = 'Full Day';
+  else if (normalizedType === 'overtime' || normalizedType === 'overtime') displayText = 'Overtime';
+  else if (normalizedType === 'present') displayText = 'Present';
+  else if (normalizedType === 'invalid') displayText = 'Invalid';
+  else if (normalizedType === 'absent') displayText = 'Absent';
+  else if (normalizedType === 'incomplete') displayText = 'Incomplete';
 
   return (
-    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${config.bgColor} ${config.textColor} ${config.borderColor}`}>
-      {config.text}
+    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+      normalizedType === 'present' ? 'bg-blue-100 text-blue-800' : 
+      normalizedType === 'half-day' || normalizedType === 'halfday' ? 'bg-yellow-100 text-yellow-800' :
+      normalizedType === 'full-day' || normalizedType === 'fullday' ? 'bg-green-100 text-green-800' :
+      normalizedType === 'invalid' ? 'bg-red-100 text-red-800' :
+      normalizedType === 'overtime' ? 'bg-purple-100 text-purple-800' :
+      normalizedType === 'absent' ? 'bg-gray-100 text-gray-800' :
+      normalizedType === 'incomplete' ? 'bg-orange-100 text-orange-800' :
+      'bg-gray-100 text-gray-800'
+    }`}>
+      {displayText}
     </span>
   );
 };
@@ -71,6 +62,9 @@ const Salary = () => {
   const [showArchived, setShowArchived] = useState(false);
   const [archivedSalaries, setArchivedSalaries] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [showSalaryRateModal, setShowSalaryRateModal] = useState(false); // ✅ Add modal state
+  const [showImportantNotice, setShowImportantNotice] = useState(false); // ✅ FIX: Add missing state for collapsible notice
   const [newSalaryData, setNewSalaryData] = useState({
     employeeId: '',
     salary: '',
@@ -159,14 +153,28 @@ const Salary = () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/attendance`);
       const data = await response.json();
+      
+      // ✅ FIX: Handle paginated response - extract data array from response object
+      // Backend returns: { success: true, data: [...], pagination: {...} }
+      // We need to extract the data array, not use the whole response object
       if (Array.isArray(data)) {
+        // Direct array (old format)
         setAttendanceRecords(data);
+        logger.log('✅ Attendance data loaded (array format):', data.length, 'records');
+      } else if (data.data && Array.isArray(data.data)) {
+        // Paginated response (new format) - THIS IS THE FIX!
+        setAttendanceRecords(data.data);
+        logger.log('✅ Attendance data loaded (paginated format):', data.data.length, 'records');
+      } else if (data.attendance && Array.isArray(data.attendance)) {
+        // Alternative field name
+        setAttendanceRecords(data.attendance);
+        logger.log('✅ Attendance data loaded (attendance field):', data.attendance.length, 'records');
       } else {
-        logger.error('Attendance data is not an array:', data);
+        logger.error('❌ Attendance data structure unexpected:', data);
         setAttendanceRecords([]);
       }
     } catch (err) {
-      logger.error('Error fetching attendance data:', err);
+      logger.error('❌ Error fetching attendance data:', err);
       setAttendanceRecords([]);
     }
   };
@@ -184,7 +192,25 @@ const Salary = () => {
       return record.employeeId === employeeId && recordDateStr === salaryDateStr;
     });
     
-    return attendanceRecord?.dayType || 'N/A';
+    // Return dayType (capitalized) or status (lowercase) - prefer dayType
+    return attendanceRecord?.dayType || attendanceRecord?.status || 'N/A';
+  };
+
+  // NEW: Get calculated salary from attendance record
+  const getCalculatedSalary = (employeeId, salaryDate) => {
+    if (!salaryDate || !attendanceRecords.length) return 0;
+    
+    const salaryDateStr = new Date(salaryDate).toISOString().split('T')[0];
+    
+    // Find attendance record for this employee on this date
+    const attendanceRecord = attendanceRecords.find(record => {
+      if (!record.date) return false;
+      const recordDateStr = new Date(record.date).toISOString().split('T')[0];
+      return record.employeeId === employeeId && recordDateStr === salaryDateStr;
+    });
+    
+    // Return totalPay from attendance (includes daySalary + overtimePay)
+    return attendanceRecord?.totalPay || attendanceRecord?.daySalary || 0;
   };
 
   // Extract available years from salary data
@@ -569,20 +595,32 @@ const Salary = () => {
   );
 
   return (
-    <div className="d-flex" style={{ minHeight: '100vh', background: '#f8f9fb' }}>
-      <AdminSidebar />
-      
-      {/* Main Content with Sidebar Margin */}
-      <div 
-        className="flex-1 overflow-auto" 
-        style={{ 
-          marginLeft: '280px',
-          width: 'calc(100% - 280px)'
-        }}
+    <div className="admin-page-wrapper">
+      {/* Mobile Hamburger Menu */}
+      <button
+        className="hamburger-menu-button"
+        onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+        aria-label="Toggle Menu"
       >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      {/* Mobile Sidebar Overlay */}
+      <div 
+        className={`mobile-sidebar-overlay ${isMobileSidebarOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileSidebarOpen(false)}
+      />
+
+      {/* Admin Sidebar */}
+      <AdminSidebar isMobileOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
+
+      {/* Main Content */}
+      <div className="admin-main-content">
         <AdminHeader />
         
-        <div className="p-4">
+        <div className="admin-content-area">
           <div className="card shadow-sm" style={{ borderRadius: '15px', border: 'none' }}>
            
             <div className="card-header" style={{ borderRadius: '0', padding: '20px', background: 'transparent' }}>
@@ -596,6 +634,21 @@ const Salary = () => {
                     Automatic salary calculation based on attendance records
                   </p>
                 </div>
+                {/* ✅ CORRECT: Adjust Salary Rate button opens modal */}
+                <button 
+                  className="btn" 
+                  onClick={() => setShowSalaryRateModal(true)}
+                  style={{ 
+                    backgroundColor: '#f06a98', 
+                    border: 'none', 
+                    color: '#ffffff', 
+                    padding: '10px 20px', 
+                    fontSize: '1rem',
+                    borderRadius: '8px'
+                  }}
+                >
+                  <i className="fas fa-edit me-2"></i>Adjust Salary Rate
+                </button>
               </div>
 
               {/* Search Bar and Filters */}
@@ -746,7 +799,6 @@ const Salary = () => {
                           ) : (
                             filteredData.map((salary, index) => {
                               const employee = employees.find(emp => emp.employeeId === salary.employeeId);
-                              const dayType = getDayType(salary.employeeId, salary.date); // Get dayType from attendance
                               
                               return (
                                 <tr key={salary._id} className="hover:bg-gray-50">
@@ -756,9 +808,13 @@ const Salary = () => {
                                   </td>
                                   <td className="px-4 py-3 whitespace-nowrap border">{salary.employeeId}</td>
                                   <td className="px-4 py-3 whitespace-nowrap border">
-                                    <StatusBadge dayType={dayType} />
+                                    {/* ✅ CORRECT: Show attendance status (Half-Day/Full-Day/Overtime) */}
+                                    <StatusBadge dayType={getDayType(salary.employeeId, salary.date || salary.createdAt)} />
                                   </td>
-                                  <td className="px-4 py-3 whitespace-nowrap border">{formatPeso(salary.amount || salary.salary)}</td>
+                                  <td className="px-4 py-3 whitespace-nowrap border">
+                                    {/* ✅ CORRECT: Show calculated salary from attendance totalPay */}
+                                    {formatPeso(getCalculatedSalary(salary.employeeId, salary.date || salary.createdAt) || salary.salary || salary.amount || 0)}
+                                  </td>
                                   <td className="px-4 py-3 whitespace-nowrap border">
                                     {salary.date ? formatTableDate(salary.date) : 'N/A'}
                                   </td>
@@ -807,7 +863,6 @@ const Salary = () => {
                           ) : (
                             filteredArchivedSalaries.map((salary, index) => {
                               const employee = employees.find(emp => emp.employeeId === salary.employeeId);
-                              const dayType = getDayType(salary.employeeId, salary.date); // Get dayType from attendance
                               
                               return (
                                 <tr key={salary._id} className="hover:bg-gray-50 bg-gray-50">
@@ -817,9 +872,13 @@ const Salary = () => {
                                   </td>
                                   <td className="px-4 py-3 whitespace-nowrap border">{salary.employeeId}</td>
                                   <td className="px-4 py-3 whitespace-nowrap border">
-                                    <StatusBadge dayType={dayType} />
+                                    {/* ✅ CORRECT: Show attendance status (Half-Day/Full-Day/Overtime) */}
+                                    <StatusBadge dayType={getDayType(salary.employeeId, salary.date || salary.createdAt)} />
                                   </td>
-                                  <td className="px-4 py-3 whitespace-nowrap border">{formatPeso(salary.amount || salary.salary)}</td>
+                                  <td className="px-4 py-3 whitespace-nowrap border">
+                                    {/* ✅ CORRECT: Show calculated salary from attendance totalPay */}
+                                    {formatPeso(getCalculatedSalary(salary.employeeId, salary.date || salary.createdAt) || salary.salary || salary.amount || 0)}
+                                  </td>
                                   <td className="px-4 py-3 whitespace-nowrap border">
                                     {salary.date ? formatTableDate(salary.date) : 'N/A'}
                                   </td>
@@ -844,9 +903,147 @@ const Salary = () => {
                 </>
               )}
             </div>
+
+            {/* ✅ CORRECT: Important Notice - Comprehensive Version (Matches Attendance.jsx Structure) */}
+            <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded-lg shadow-sm">
+              <div 
+                className="cursor-pointer d-flex align-items-center justify-content-between"
+                onClick={() => setShowImportantNotice(!showImportantNotice)}
+                style={{ cursor: 'pointer' }}
+              >
+                <h3 className="text-lg font-bold text-yellow-800 mb-0 d-flex align-items-center gap-2">
+                  <i className="fas fa-info-circle"></i>
+                  Important Notice: Salary Calculation & Status Rules
+                </h3>
+                <i className={`fas fa-chevron-${showImportantNotice ? 'up' : 'down'} text-yellow-600`}></i>
+              </div>
+              
+              {showImportantNotice && (
+                <div className="space-y-4 mt-3">
+                  {/* Work Hours & Lunch Break */}
+                  <div className="bg-orange-50 p-3 rounded-md border border-orange-300">
+                    <h4 className="font-semibold text-orange-800 mb-2 d-flex align-items-center gap-1">
+                      <i className="fas fa-clock text-sm"></i>
+                      ⏰ Standard Work Hours & Lunch Break
+                    </h4>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 ml-2">
+                      <li><strong>Standard Shift:</strong> 8:00 AM to 5:00 PM (9 hours total)</li>
+                      <li><strong>Paid Hours:</strong> Only <strong>8 hours</strong> are counted as regular work</li>
+                      <li><strong>Lunch Break (12:00 NN - 12:59 PM):</strong> <span className="text-red-600 font-bold">NOT INCLUDED</span> in the 8-hour computation</li>
+                      <li><strong>Formula:</strong> Total Time - Lunch Break = Paid Hours</li>
+                      <li><strong>Example:</strong> 8:00 AM - 5:00 PM = 9hrs - 1hr lunch = <strong>8 hours paid</strong></li>
+                    </ul>
+                  </div>
+
+                  {/* Salary Computations */}
+                  <div className="bg-white p-3 rounded-md border border-blue-200">
+                    <h4 className="font-semibold text-blue-700 mb-2 d-flex align-items-center gap-1">
+                      <i className="fas fa-calculator text-sm"></i>
+                      💰 Salary Computations
+                    </h4>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 ml-2">
+                      <li><strong>Hourly Rate:</strong> Daily Rate ÷ 8 hours (₱68.75/hr)</li>
+                      <li><strong>Overtime Rate:</strong> Hourly Rate × 1.25 = ₱85.94/hr</li>
+                      <li><strong>Half-Day Pay:</strong> Variable (4 to &lt;6.5 hours worked)</li>
+                      <li><strong>Full-Day Pay:</strong> Daily Rate (6.5-8 hours worked)</li>
+                      <li><strong>Overtime Pay:</strong> Full Day + OT Rate × OT hours (&gt;6.5 hrs + after 5PM)</li>
+                      <li><strong>Invalid Attendance:</strong> No pay (less than 4 hours worked)</li>
+                    </ul>
+                  </div>
+
+                  {/* Half-Day Variable Pay Explained */}
+                  <div className="bg-yellow-50 p-3 rounded-md border border-yellow-300">
+                    <h4 className="font-semibold text-yellow-800 mb-2 d-flex align-items-center gap-1">
+                      <i className="fas fa-coins text-sm"></i>
+                      💰 Half-Day Variable Pay Explained
+                    </h4>
+                    <p className="text-sm text-gray-700 mb-2">
+                      <strong>Half-Day status applies to 4 to &lt;6.5 hours worked, pay varies by actual hours:</strong>
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-xs text-gray-700 ml-2">
+                      <li><strong>4 hours:</strong> Half-Day Base = ₱275.00 (Daily ₱550.00 ÷ 2)</li>
+                      <li><strong>5 hours:</strong> Half-Day + 1hr = ₱275.00 + ₱68.75 = <strong>₱343.75</strong></li>
+                      <li><strong>6 hours:</strong> Half-Day + 2hrs = ₱275.00 + ₱137.50 = <strong>₱412.50</strong></li>
+                      <li><strong>6.25 hours:</strong> Half-Day + 2.25hrs = ₱275.00 + ₱154.69 = <strong>₱429.69</strong></li>
+                    </ul>
+                    <p className="text-xs text-gray-600 italic mt-2">
+                      <i className="fas fa-lightbulb text-yellow-600 mr-1"></i>
+                      <strong>Note:</strong> Same "Half-Day" status, but different pay based on actual hours worked. Once ≥6.5 hrs, it becomes "Full Day" status.
+                    </p>
+                  </div>
+
+                  {/* Status Definitions */}
+                  <div className="bg-white p-3 rounded-md border border-blue-200">
+                    <h4 className="font-semibold text-blue-700 mb-2 d-flex align-items-center gap-1">
+                      <i className="fas fa-tags text-sm"></i>
+                      📋 Status Definitions
+                    </h4>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 ml-2">
+                      <li><strong>Present:</strong> Employee clocked in only (no clock out yet)</li>
+                      <li><strong>Invalid:</strong> Worked &lt;4 hours (0% pay - No Pay)</li>
+                      <li><strong>Half-Day:</strong> Worked 4 to &lt;6.5 hours (variable pay by exact hours)</li>
+                      <li><strong>Full-Day:</strong> Worked 6.5-8 hours (100% daily rate)</li>
+                      <li><strong>Overtime:</strong> Worked &gt;6.5 hrs + timed out after 5PM (Full pay + OT rate)</li>
+                      <li><strong>Absent:</strong> No time-in record for the day (0% pay)</li>
+                    </ul>
+                    <p className="text-xs text-gray-600 italic mt-2">
+                      <i className="fas fa-info-circle text-blue-600 mr-1"></i>
+                      <strong>Note:</strong> Grace period 8:00-9:30 AM allows Full Day eligibility if ≥6.5 hours worked.
+                    </p>
+                  </div>
+
+                  {/* Overtime Eligibility */}
+                  <div className="bg-purple-50 p-3 rounded-md border border-purple-300">
+                    <h4 className="font-semibold text-purple-800 mb-2 d-flex align-items-center gap-1">
+                      <i className="fas fa-clock text-sm"></i>
+                      ⚡ Overtime Eligibility Requirements
+                    </h4>
+                    <p className="text-sm text-gray-700 mb-2">
+                      <strong>Overtime pay (₱85.94/hr) requires ALL conditions:</strong>
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-xs text-gray-700 ml-2">
+                      <li><strong>✅ Work &gt;8 hours total:</strong> Overtime hours = hours beyond 8 (excluding lunch)</li>
+                      <li><strong>✅ Minimum 6.5 hours worked:</strong> Must work at least <span className="text-purple-600 font-bold">6hrs 30min</span> to be eligible for OT</li>
+                      <li><strong>✅ Time-out after 5:00 PM:</strong> Must work past 5:00 PM for overtime eligibility</li>
+                      <li><strong>✅ Manual time-out required:</strong> Must manually clock out (not auto time-out at 8 PM)</li>
+                    </ul>
+                    <p className="text-xs text-gray-600 italic mt-2">
+                      <i className="fas fa-info-circle text-purple-600 mr-1"></i>
+                      <strong>Example:</strong> 8:00 AM - 7:00 PM (10 hrs total - 1 hr lunch = 9 hrs paid) → 8 hrs Full Day + 1 hr OT (if out after 5PM)
+                    </p>
+                  </div>
+
+                  {/* Archive & System Notes */}
+                  <div className="bg-white p-3 rounded-md border border-gray-200">
+                    <h4 className="font-semibold text-gray-700 mb-2 d-flex align-items-center gap-1">
+                      <i className="fas fa-cog text-sm"></i>
+                      ⚙️ Archive & System Notes
+                    </h4>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 ml-2">
+                      <li><strong>Automatic Calculation:</strong> Salaries calculated automatically when attendance records are finalized</li>
+                      <li><strong>Rate Adjustments:</strong> Use "Adjust Salary Rate" button to update global daily rate</li>
+                      <li><strong>Effective Dates:</strong> New rates take effect immediately through Saturday, then Monday activation for following week</li>
+                      <li><strong>Archive System:</strong> Archived records preserved for historical reference but excluded from active reporting</li>
+                      <li><strong>Weekly Totals:</strong> Salary amounts shown are calculated from attendance time-in/time-out records</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* ✅ CORRECT: Salary Rate Modal */}
+      <SalaryRateModal 
+        isOpen={showSalaryRateModal}
+        onClose={() => setShowSalaryRateModal(false)}
+        onSuccess={(updatedRate) => {
+          // Optional: Refresh salary data after rate update
+          logger.info('Salary rate updated successfully:', updatedRate);
+          // Could trigger a refetch of salary data here if needed
+        }}
+      />
     </div>
   );
 };

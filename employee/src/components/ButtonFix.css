@@ -1,0 +1,292 @@
+/* ================================================
+   BUTTON STRETCHING FIX - COMPREHENSIVE SOLUTION
+   Root Cause: Flex containers stretching buttons
+   Solution: Override flex properties and set explicit widths
+   ================================================ */
+
+/* ============================================
+   GLOBAL BUTTON FIX - Apply to all buttons
+   ============================================ */
+.btn,
+button.btn,
+.btn-pink,
+button[class*="btn"] {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+  max-width: max-content !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+}
+
+/* ============================================
+   SPECIFIC BUTTON FIXES
+   ============================================ */
+
+/* Employee Management - Add Employee Button */
+.add-employee-btn,
+button.add-employee-btn {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+  white-space: nowrap !important;
+}
+
+/* Salary Management - Adjust Salary Rate & View Archive */
+.card-header .btn,
+.card-header button {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+  white-space: nowrap !important;
+}
+
+/* Cash Advance Management - Cash Advance & View Archive */
+button[style*="backgroundColor: '#f06a98'"],
+button[style*="background-color: #f06a98"],
+button[style*="backgroundColor: '#6c757d'"],
+button[style*="background-color: #6c757d"] {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+  white-space: nowrap !important;
+}
+
+/* Payroll Records - Mandatory Deduction, Payslip, View Archive */
+.pink-section button,
+.pink-section .btn,
+.pink-section .btn-pink {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+  white-space: nowrap !important;
+}
+
+/* Payslip - Print Payslip & Back to Payroll */
+.card-header button[class*="btn"],
+.card-header .btn,
+button[style*="flex: '0 0 auto'"] {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+  white-space: nowrap !important;
+}
+
+/* ============================================
+   FLEX CONTAINER FIX
+   Ensure flex containers don't stretch buttons
+   ============================================ */
+
+/* Fix flex containers that contain buttons */
+.d-flex:has(button),
+.d-flex:has(.btn),
+div[style*="display: flex"]:has(button),
+div[style*="display: flex"]:has(.btn) {
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 0.75rem !important;
+}
+
+/* Specific flex container fixes */
+.card-header .d-flex,
+.card-header div[style*="display: flex"] {
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: 1rem !important;
+}
+
+/* ============================================
+   BUTTON GROUP FIXES
+   Ensure button groups don't stretch buttons
+   ============================================ */
+
+/* Button groups in header */
+.card-header .d-flex.gap-2,
+.card-header .d-flex.gap-3,
+.card-header div[class*="gap"] {
+  flex-wrap: wrap !important;
+  align-items: center !important;
+}
+
+/* Button groups with multiple buttons */
+.d-flex.gap-2 button,
+.d-flex.gap-3 button,
+div[class*="gap"] button {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+}
+
+/* ============================================
+   INLINE STYLE OVERRIDE
+   Override inline styles that might cause stretching
+   ============================================ */
+
+/* Override inline flex styles on buttons */
+button[style*="flex:"],
+.btn[style*="flex:"],
+button[style*="width:"],
+.btn[style*="width:"] {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+  max-width: max-content !important;
+}
+
+/* ============================================
+   RESPONSIVE BUTTON FIXES
+   Ensure buttons work properly on all screen sizes
+   ============================================ */
+
+/* Mobile - prevent button stretching */
+@media (max-width: 768px) {
+  .btn,
+  button.btn,
+  .btn-pink,
+  .add-employee-btn {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: fit-content !important;
+    max-width: max-content !important;
+    white-space: nowrap !important;
+  }
+  
+  /* Stack buttons vertically on mobile if needed */
+  .card-header .d-flex {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  
+  /* But keep button widths auto */
+  .card-header .d-flex button,
+  .card-header .d-flex .btn {
+    width: auto !important;
+    align-self: center !important;
+  }
+}
+
+/* Tablet - maintain button sizing */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .btn,
+  button.btn,
+  .btn-pink {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: fit-content !important;
+  }
+}
+
+/* Desktop - ensure proper button spacing */
+@media (min-width: 1025px) {
+  .btn,
+  button.btn,
+  .btn-pink {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: fit-content !important;
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+  }
+  
+  .btn:first-child,
+  button.btn:first-child {
+    margin-left: 0;
+  }
+  
+  .btn:last-child,
+  button.btn:last-child {
+    margin-right: 0;
+  }
+}
+
+/* ============================================
+   SPECIFIC COMPONENT FIXES
+   Target specific components mentioned in the issue
+   ============================================ */
+
+/* Employee Management - Add Employee */
+.employee-header-section button,
+.employee-header-section .btn {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+}
+
+/* Salary Management - Adjust Salary Rate & View Archive */
+div[style*="marginLeft: '280px'"] .card-header button,
+div[style*="marginLeft: '280px'"] .card-header .btn {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+  white-space: nowrap !important;
+}
+
+/* Cash Advance - Cash Advance & View Archive */
+.modal-header button,
+.modal-footer button {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+}
+
+/* Payroll - Mandatory Deduction, Payslip, View Archive */
+.flex.justify-end button,
+.flex.justify-end .btn {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+}
+
+/* Payslip - Print Payslip & Back to Payroll */
+.d-flex.gap-2 button,
+div[class*="gap-2"] button {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+}
+
+/* ============================================
+   UTILITY CLASSES FOR MANUAL FIX
+   Use these classes if needed for specific buttons
+   ============================================ */
+
+.btn-no-stretch {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+  max-width: max-content !important;
+  white-space: nowrap !important;
+}
+
+.btn-group-no-stretch {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.5rem !important;
+  align-items: center !important;
+}
+
+.btn-group-no-stretch button,
+.btn-group-no-stretch .btn {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+}
+
+/* ============================================
+   FINAL SAFETY NET
+   Last resort to prevent any button stretching
+   ============================================ */
+
+button:not([type="submit"]):not([type="button"]):not([type="reset"]),
+.btn:not(.btn-block),
+.btn-pink:not(.w-100) {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: fit-content !important;
+  max-width: max-content !important;
+  white-space: nowrap !important;
+}
+
+/* END OF BUTTON FIX */

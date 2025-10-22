@@ -30,4 +30,12 @@ const DeductionSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// ===== PERFORMANCE INDEXES =====
+// ✅ FIX ISSUE: Add indexes for frequently queried fields to improve performance
+DeductionSchema.index({ employee: 1 }); // Employee reference lookups
+DeductionSchema.index({ type: 1 }); // Filter by deduction type
+DeductionSchema.index({ date: -1 }); // Sort by date
+DeductionSchema.index({ processed: 1 }); // Filter processed/unprocessed
+DeductionSchema.index({ employee: 1, date: -1 }); // Compound index for employee+date queries
+
 export default mongoose.model("Deduction", DeductionSchema);

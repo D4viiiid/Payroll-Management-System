@@ -2,6 +2,7 @@
 const router = express.Router();
 import Attendance from '../models/AttendanceModels.js';
 import Employee from '../models/EmployeeModels.js';
+import SalaryRate from '../models/SalaryRate.model.js';
 import { localEmployeeStorage, localAttendanceStorage } from '../localStorage.js';
 import { mongoConnected } from '../server.js';
 import { validateTimeInRealTime, validateAndCalculateAttendance } from '../utils/attendanceCalculator.js';
@@ -186,8 +187,17 @@ router.post('/attendance', validateNoSunday, async (req, res) => {
 });
 
 // Get attendance records (with pagination and filtering)
-router.get('/attendance', setCacheHeaders(300), async (req, res) => {
+// ✅ FIX: Remove HTTP caching to prevent stale data
+router.get('/attendance', async (req, res) => {
+    // ✅ CRITICAL FIX: Set no-cache headers to prevent browser HTTP caching
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     try {
+        // ✅ PERFORMANCE FIX: Start timing
+        const startTime = Date.now();
+        
         // Parse pagination parameters
         const paginationParams = getPaginationParams(req.query);
         const { page, limit, skip, maxLimit } = paginationParams;
@@ -195,7 +205,7 @@ router.get('/attendance', setCacheHeaders(300), async (req, res) => {
 
         // ✅ FIX: Build query with filters for employeeId, startDate, endDate
         const { employeeId, startDate, endDate } = req.query;
-        let filter = {};
+        let filter = { archived: false }; // ✅ Always filter archived by default
         
         // Filter by employeeId if provided
         if (employeeId) {
@@ -213,25 +223,28 @@ router.get('/attendance', setCacheHeaders(300), async (req, res) => {
             }
         }
 
-        // Build query with filters
-        const query = Attendance.find(filter)
-            .sort({ date: -1, timeIn: -1, time: -1 })
-            .populate('employee', 'firstName lastName employeeId');
-
-        // Get total count with same filters
-        const totalCount = await Attendance.countDocuments(filter);
-
-        // Execute paginated query with optimization
-        const results = await query
-            .skip(skip)
-            .limit(safeLimit)
-            .lean()
-            .exec();
+        // ✅ CRITICAL PERFORMANCE FIX: Run count and query in parallel
+        // Also optimize populate to only select needed fields
+        const [totalCount, results] = await Promise.all([
+            Attendance.countDocuments(filter).exec(),
+            
+            Attendance.find(filter)
+                .sort({ date: -1, timeIn: -1 })
+                .populate('employee', 'firstName lastName employeeId') // Only select needed employee fields
+                .skip(skip)
+                .limit(safeLimit)
+                .select('employee employeeId date timeIn timeOut status dayType actualHoursWorked overtimeHours daySalary totalPay') // Select only needed attendance fields
+                .lean() // Use lean() for 5-10x faster queries
+                .exec()
+        ]);
 
         // Build paginated response
         const response = createPaginatedResponse(results, totalCount, paginationParams);
 
-        console.log(`📊 Retrieved ${results.length} of ${totalCount} attendance records (page ${page})`);
+        const endTime = Date.now();
+        const totalTime = endTime - startTime;
+        console.log(`📊 Retrieved ${results.length} of ${totalCount} attendance records (page ${page}) in ${totalTime}ms`);
+        
         res.json(response);
     } catch (error) {
         console.error('❌ Error fetching attendance records:', error);
@@ -242,6 +255,9 @@ router.get('/attendance', setCacheHeaders(300), async (req, res) => {
 // Get attendance statistics - MUST be before /:employeeId to avoid route conflict
 router.get('/attendance/stats', async (req, res) => {
     try {
+        // ✅ PERFORMANCE FIX: Start timing
+        const startTime = Date.now();
+        
         // Use Philippines timezone for accurate date
         const today = getStartOfDay();
         const tomorrow = getEndOfDay();
@@ -253,15 +269,26 @@ router.get('/attendance/stats', async (req, res) => {
         let totalEmployees = 0;
 
         if (isMongoConnected()) {
-            // Use MongoDB - Query using the 'date' field from the new schema
-            todayRecords = await Attendance.find({
-                date: { $gte: today, $lt: tomorrow },
-                archived: false
-            }).sort({ timeIn: -1 });
-
-            totalEmployees = await Employee.countDocuments();
+            // ✅ CRITICAL PERFORMANCE FIX: Run queries in parallel
+            const [records, empCount] = await Promise.all([
+                // Use lean() for 5-10x faster queries, select only needed fields
+                Attendance.find({
+                    date: { $gte: today, $lt: tomorrow },
+                    archived: false
+                })
+                .select('employeeId timeIn timeOut status dayType actualHoursWorked')
+                .lean()
+                .exec(),
+                
+                // Get employee count in parallel
+                Employee.countDocuments().exec()
+            ]);
             
-            console.log(`📊 Found ${todayRecords.length} attendance records for today`);
+            todayRecords = records;
+            totalEmployees = empCount;
+            
+            const queryTime = Date.now() - startTime;
+            console.log(`📊 Found ${todayRecords.length} attendance records for today in ${queryTime}ms`);
             console.log(`📊 Total employees: ${totalEmployees}`);
         } else {
             // Use local storage
@@ -270,15 +297,17 @@ router.get('/attendance/stats', async (req, res) => {
         }
 
         // ✅ FIX ISSUE 2: Accurate statistics calculation
-        // Count employees based on attendance status
+        // Count employees based on attendance status and ACTUAL WORK HOURS
         // Present: Has timeIn but NO timeOut yet (currently working)
-        // Full Day: timeOut between 5:00 PM - onwards (completed full shift)
-        // Half Day: timeOut before 5:00 PM (early departure)
-        // Grace period for timeIn: 8:00 AM - 9:30 AM
+        // Full Day: Worked >= 6.5 hours (excluding 1-hour lunch break)
+        // Half Day: Worked >= 4 hours but < 6.5 hours
+        // Invalid: Worked < 4 hours (no pay eligibility)
+        // Absent: Did not show up today
         
         let present = 0;       // Currently working (has timeIn, no timeOut)
-        let fullDay = 0;       // Completed full day (timeOut at 5:00 PM or later)
-        let halfDay = 0;       // Left early (timeOut before 5:00 PM)
+        let fullDay = 0;       // Completed full day (>= 6.5 hours)
+        let halfDay = 0;       // Partial day (>= 4 hours, < 6.5 hours)
+        let invalid = 0;       // Invalid attendance (< 4 hours worked)
         let totalAttended = 0; // Total who showed up today
 
         todayRecords.forEach(record => {
@@ -286,27 +315,35 @@ router.get('/attendance/stats', async (req, res) => {
                 totalAttended++;
                 
                 if (record.timeOut) {
-                    // Employee has completed their shift
-                    // Use actual hours worked from calculation instead of just time-out hour
-                    const timeOutHour = new Date(record.timeOut).getHours();
-                    const timeOutMinute = new Date(record.timeOut).getMinutes();
-                    const timeOutInMinutes = timeOutHour * 60 + timeOutMinute;
-                    const fivePM = 17 * 60; // 5:00 PM in minutes (17:00)
+                    // ✅ FIX: Use status from database
+                    // Status rules:
+                    // - 'present': Only for employees who clocked in but haven't clocked out yet
+                    // - 'invalid': <4 hours worked (no pay)
+                    // - 'half-day': 4 to <6.5 hours worked (variable pay)
+                    // - 'full-day': 6.5-8 hours worked (100% daily rate)
+                    // - 'overtime': >6.5 hours + timed out after 5PM (full pay + OT)
+                    const status = record.status || 'present';
                     
-                    // ✅ More accurate: check actualHoursWorked or dayType if available
-                    if (record.dayType) {
-                        // Use the calculated dayType from attendance record
-                        if (record.dayType === 'Full Day') {
+                    if (status === 'invalid') {
+                        invalid++;
+                    } else if (status === 'half-day') {
+                        halfDay++;
+                    } else if (status === 'full-day') {
+                        // Full day: 6.5-8 hours worked
+                        fullDay++;
+                    } else if (status === 'overtime') {
+                        // Overtime also counts as full day worked
+                        fullDay++;
+                    } else if (status === 'present') {
+                        // Legacy records: 'present' with timeOut means full day
+                        // Fallback calculation for old data
+                        const hoursWorked = calculateWorkHours(record.timeIn, record.timeOut);
+                        if (hoursWorked >= 6.5) {
                             fullDay++;
-                        } else if (record.dayType === 'Half Day') {
+                        } else if (hoursWorked >= 4) {
                             halfDay++;
-                        }
-                    } else {
-                        // Fallback to time-based calculation
-                        if (timeOutInMinutes >= fivePM) {
-                            fullDay++;
                         } else {
-                            halfDay++;
+                            invalid++;
                         }
                     }
                 } else {
@@ -318,12 +355,16 @@ router.get('/attendance/stats', async (req, res) => {
 
         const absent = totalEmployees - totalAttended;
 
-        console.log(`📊 Stats: Present=${present}, FullDay=${fullDay}, HalfDay=${halfDay}, Absent=${absent}, TotalEmployees=${totalEmployees}, TotalAttended=${totalAttended}`);
+        const endTime = Date.now();
+        const totalTime = endTime - startTime;
+        console.log(`📊 Stats: Present=${present}, FullDay=${fullDay}, HalfDay=${halfDay}, Invalid=${invalid}, Absent=${absent}, TotalEmployees=${totalEmployees}, TotalAttended=${totalAttended}`);
+        console.log(`⚡ Total processing time: ${totalTime}ms`);
 
         res.json({
             totalPresent: present,  // Currently working (no timeOut)
             fullDay,
             halfDay,
+            invalid,  // ✅ NEW: Include invalid count
             absent
         });
     } catch (error) {
@@ -498,30 +539,51 @@ router.post('/attendance/record', async (req, res) => {
             // Update existing record with timeOut
             todayRecord.timeOut = now;
             
-            // Calculate attendance with the employee's daily rate
-            const calculation = await validateAndCalculateAttendance(
-                todayRecord.timeIn,
-                now,
-                todayRecord.date,
-                employee.dailyRate || 550
+            // ✅ FIX: Get current salary rate from SalaryRate collection
+            const currentRate = await SalaryRate.getCurrentRate();
+            
+            // ✅ CRITICAL FIX: Call validateAndCalculateAttendance with CURRENT SALARY RATE
+            const calculation = validateAndCalculateAttendance(
+                {
+                    timeIn: todayRecord.timeIn,
+                    timeOut: now,
+                    date: todayRecord.date,
+                    notes: todayRecord.notes || ''
+                },
+                {
+                    dailyRate: currentRate.dailyRate,
+                    overtimeRate: currentRate.overtimeRate
+                }
             );
+
+            console.log(`📊 Using current salary rate: Daily=₱${currentRate.dailyRate}, OT=₱${currentRate.overtimeRate}`);
 
             // Update record with calculated values
             todayRecord.dayType = calculation.dayType;
-            todayRecord.actualHoursWorked = calculation.actualHoursWorked;
+            todayRecord.actualHoursWorked = calculation.hoursWorked;
             todayRecord.overtimeHours = calculation.overtimeHours;
             todayRecord.daySalary = calculation.daySalary;
             todayRecord.overtimePay = calculation.overtimePay;
             todayRecord.totalPay = calculation.totalPay;
-            todayRecord.isValidDay = calculation.isValidDay;
-            todayRecord.validationReason = calculation.validationReason;
-            todayRecord.status = calculation.dayType === 'Full Day' ? 'present' : 
-                                calculation.dayType === 'Half Day' ? 'half-day' : 'present';
+            todayRecord.isValidDay = calculation.isValid;
+            todayRecord.validationReason = calculation.reason;
+            // ✅ FIX ISSUE #1 & #2: Map dayType to proper status
+            // Present: Employee clocked in only (no clock out yet)
+            // Invalid: Worked <4 hours (0% pay - No Pay)
+            // Half-Day: Worked 4 to <6.5 hours (variable pay by exact hours)
+            // Full-Day: Worked 6.5-8 hours (100% daily rate)
+            // Overtime: Worked >6.5 hrs + timed out after 5PM (Full pay + OT rate)
+            // Absent: No time-in record for the day (0% pay)
+            todayRecord.status = calculation.dayType === 'Full Day' ? 'full-day' : 
+                                calculation.dayType === 'Half Day' ? 'half-day' : 
+                                calculation.dayType === 'Invalid' ? 'invalid' : 
+                                calculation.dayType === 'Overtime' ? 'overtime' : 
+                                calculation.dayType === 'Absent' ? 'absent' : 'present';
 
             await todayRecord.save();
 
             console.log(`✅ Time Out recorded for ${employee.firstName} ${employee.lastName} - ${calculation.dayType}`);
-            message = `${employee.firstName} ${employee.lastName} timed out successfully at ${formatTime(now)} (${calculation.dayType}: ${calculation.actualHoursWorked.toFixed(2)} hours)`;
+            message = `${employee.firstName} ${employee.lastName} timed out successfully at ${formatTime(now)} (${calculation.dayType}: ${calculation.hoursWorked.toFixed(2)} hours)`;
             actionType = 'time_out';
 
         } else {
@@ -972,23 +1034,31 @@ router.post('/attendance/calculate', async (req, res) => {
             });
         }
 
-        // Calculate attendance
+        // ✅ FIX: Get current salary rate from SalaryRate collection
+        const currentRate = await SalaryRate.getCurrentRate();
+
+        // Calculate attendance using CURRENT SALARY RATE
         const calculation = validateAndCalculateAttendance(
             { timeIn, timeOut, date },
             {
-                dailyRate: employee.dailyRate || 550,
-                overtimeRate: employee.overtimeRate || 85.94
+                dailyRate: currentRate.dailyRate,
+                overtimeRate: currentRate.overtimeRate
             }
         );
         
-        console.log(`✅ Calculation complete: ${calculation.dayType}, ₱${calculation.totalPay}`);
+        console.log(`✅ Calculation complete: ${calculation.dayType}, ₱${calculation.totalPay} (Rate: ₱${currentRate.dailyRate}/day)`);
         
         res.json({
             success: true,
             employee: {
                 employeeId: employee.employeeId,
                 name: `${employee.firstName} ${employee.lastName}`,
-                dailyRate: employee.dailyRate
+                dailyRate: currentRate.dailyRate
+            },
+            salaryRate: {
+                dailyRate: currentRate.dailyRate,
+                hourlyRate: currentRate.hourlyRate,
+                overtimeRate: currentRate.overtimeRate
             },
             calculation
         });

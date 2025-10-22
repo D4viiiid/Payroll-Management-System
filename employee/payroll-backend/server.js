@@ -74,11 +74,21 @@ const corsOptions = {
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Cache-Control',
+    'Pragma',
+    'Expires'
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 };
 
 console.log('🔒 CORS Configuration:');
 console.log('   Allowed Origin:', corsOptions.origin);
+console.log('   Allowed Headers:', corsOptions.allowedHeaders.join(', '));
 
 // ✅ Middleware (must come first)
 app.use(cors(corsOptions));

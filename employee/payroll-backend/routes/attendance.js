@@ -280,8 +280,8 @@ router.get('/attendance/stats', async (req, res) => {
                 .lean()
                 .exec(),
                 
-                // Get employee count in parallel
-                Employee.countDocuments().exec()
+                // ✅ FIX ISSUE #1: Count only ACTIVE employees for accurate absent calculation
+                Employee.countDocuments({ isActive: true }).exec()
             ]);
             
             todayRecords = records;

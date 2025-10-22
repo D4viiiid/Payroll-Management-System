@@ -61,16 +61,44 @@ export const getSalaryRateForDate = async (date) => {
 // Create new salary rate (admin only)
 export const createSalaryRate = async (rateData) => {
   try {
+    const token = localStorage.getItem('token');
+    
+    // ✅ FIX: Add comprehensive logging for debugging
+    console.log('🔐 Salary Rate Service - Token Check:');
+    console.log('  - Token exists:', !!token);
+    console.log('  - Token length:', token ? token.length : 0);
+    console.log('  - Token preview:', token ? token.substring(0, 50) + '...' : 'NO TOKEN');
+    console.log('  - API URL:', `${API_URL}/salary-rate`);
+    console.log('  - Rate Data:', rateData);
+    
+    if (!token) {
+      console.error('❌ NO TOKEN FOUND! User might not be logged in.');
+      throw new Error('Authentication token not found. Please login again.');
+    }
+    
     const response = await axios.post(`${API_URL}/salary-rate`, rateData, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
     });
+    
+    console.log('✅ Salary rate created successfully:', response.data);
     return response.data;
   } catch (error) {
     console.error('❌ Error creating salary rate:', error);
-    throw error;
+    console.error('  - Error message:', error.message);
+    console.error('  - Response data:', error.response?.data);
+    console.error('  - Response status:', error.response?.status);
+    
+    // ✅ Provide user-friendly error messages
+    if (error.response?.status === 401) {
+      throw new Error('Authentication failed. Your session may have expired. Please login again.');
+    } else if (error.response?.status === 403) {
+      throw new Error('Access denied. Admin privileges required.');
+    } else {
+      throw new Error(error.response?.data?.message || error.message || 'Failed to update salary rate');
+    }
   }
 };
 

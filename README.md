@@ -47,3 +47,5 @@ pip install -r requirements.txt
 
 Why `.venv` is excluded
 - Committing `site-packages` inflates the repository and often contains platform-specific binaries; excluding the venv keeps the repo small and portable. Use `requirements.txt` to reproduce the environment.
+
+<!-- Force rebuild 10/23/2025 11:39:19 -->

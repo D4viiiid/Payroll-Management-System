@@ -19,7 +19,10 @@ export const employeeLogin = async (username, password) => {
       throw new Error(data.message || 'Login failed');
     }
 
-    // Store employee data in localStorage
+    // Store employee data AND JWT token in localStorage
+    if (data.token) {
+      localStorage.setItem('token', data.token); // ✅ CRITICAL: Store JWT token
+    }
     localStorage.setItem('employee', JSON.stringify(data.employee));
     localStorage.setItem('isEmployeeLoggedIn', 'true');
     
@@ -99,4 +102,5 @@ export const isEmployeeLoggedIn = () => {
 export const employeeLogout = () => {
   localStorage.removeItem('employee');
   localStorage.removeItem('isEmployeeLoggedIn');
+  localStorage.removeItem('token'); // ✅ Remove JWT token on logout
 };

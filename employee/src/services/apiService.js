@@ -47,12 +47,20 @@ const handleApiError = (error, customMessage = 'An error occurred') => {
 // Generic fetch function with error handling
 const fetchApi = async (url, options = {}) => {
   try {
+    // ✅ CRITICAL FIX: Get JWT token from localStorage
+    const token = localStorage.getItem('token');
+    
     // ✅ CRITICAL FIX: Add cache-busting headers to prevent browser HTTP caching
     const defaultHeaders = {
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0'
     };
+    
+    // ✅ CRITICAL FIX: Add Authorization header if token exists
+    if (token) {
+      defaultHeaders['Authorization'] = `Bearer ${token}`;
+    }
     
     const mergedOptions = {
       ...options,

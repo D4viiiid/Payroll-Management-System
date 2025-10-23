@@ -151,7 +151,7 @@ const Salary = () => {
   // NEW: Fetch attendance data to get dayType for salary records
   const fetchAttendanceData = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/attendance`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/attendance`);
       const data = await response.json();
       
       // ✅ FIX: Handle paginated response - extract data array from response object

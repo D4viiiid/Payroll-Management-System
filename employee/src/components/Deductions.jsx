@@ -650,7 +650,7 @@ const Deduction = () => {
         setLoading(true);
         
         // Call PATCH /api/cash-advance/:id/archive endpoint
-        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/cash-advance/${id}/archive`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/cash-advance/${id}/archive`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -691,7 +691,7 @@ const Deduction = () => {
         setLoading(true);
         
         // Call PATCH /api/cash-advance/:id/restore endpoint
-        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/cash-advance/${id}/restore`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/cash-advance/${id}/restore`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',

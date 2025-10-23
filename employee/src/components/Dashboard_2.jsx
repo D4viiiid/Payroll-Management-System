@@ -64,13 +64,26 @@ const Dashboard_2 = () => {
     try {
       setLoadingAttendance(true);
       setErrorAttendance(null);
+      
+      console.log('📊 Dashboard: Fetching attendance stats...');
       const data = await attendanceApi.getStats();
+      console.log('📊 Dashboard: Stats received:', data);
+      
       if (!data.error) {
+        console.log('📊 Dashboard: Setting stats state:', {
+          totalPresent: data.totalPresent,
+          fullDay: data.fullDay,
+          halfDay: data.halfDay,
+          absent: data.absent,
+          invalid: data.invalid
+        });
         setAttendanceStats(data);
       } else {
+        console.error('❌ Dashboard: Error in stats response:', data.error);
         setErrorAttendance(data.error);
       }
     } catch (err) {
+      console.error('❌ Dashboard: Failed to fetch stats:', err);
       setErrorAttendance('Failed to fetch attendance stats');
     } finally {
       setLoadingAttendance(false);

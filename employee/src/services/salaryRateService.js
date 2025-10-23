@@ -11,20 +11,30 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const validateToken = () => {
   const token = localStorage.getItem('token');
   
+  // Check 1: Token exists
   if (!token) {
     console.error('❌ NO TOKEN: User is not logged in');
     throw new Error('NO_TOKEN: Please login to continue.');
   }
   
-  // ✅ Validate token format (JWT should have 3 parts: header.payload.signature)
+  // Check 2: Token is a string (not null, undefined, or object)
+  if (typeof token !== 'string') {
+    console.error('❌ INVALID TOKEN TYPE: Token is not a string');
+    localStorage.removeItem('token');
+    throw new Error('INVALID_TOKEN: Please login again.');
+  }
+  
+  // Check 3: Token format (JWT should have 3 parts: header.payload.signature)
   const parts = token.split('.');
   if (parts.length !== 3) {
     console.error('❌ INVALID TOKEN FORMAT: Token does not have 3 parts');
+    console.error('   Token value:', token.substring(0, 100) + '...');
+    console.error('   Parts found:', parts.length);
     localStorage.removeItem('token'); // Clear invalid token
     throw new Error('INVALID_TOKEN: Please login again.');
   }
   
-  // ✅ Check token expiration (decode payload and check 'exp' claim)
+  // Check 4: Token expiration (decode payload and check 'exp' claim)
   try {
     const payload = JSON.parse(atob(parts[1])); // Decode base64 payload
     if (payload.exp) {
@@ -43,6 +53,9 @@ const validateToken = () => {
       console.log(`✅ Token valid - Expires in ${remainingDays} days`);
     }
   } catch (decodeError) {
+    if (decodeError.message?.includes('TOKEN_EXPIRED')) {
+      throw decodeError; // Re-throw expiration error
+    }
     console.error('❌ TOKEN DECODE ERROR:', decodeError.message);
     localStorage.removeItem('token'); // Clear malformed token
     throw new Error('INVALID_TOKEN: Token is malformed. Please login again.');
@@ -72,15 +85,25 @@ export const getCurrentSalaryRate = async () => {
 // Get salary rate history (admin only)
 export const getSalaryRateHistory = async (limit = 10) => {
   try {
+    // ✅ CRITICAL FIX: Validate token before API call
+    const token = validateToken();
+    
     const response = await axios.get(`${API_URL}/salary-rate/history`, {
       params: { limit },
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${token}`
       }
     });
     return response.data.history;
   } catch (error) {
     console.error('❌ Error fetching salary rate history:', error);
+    
+    // ✅ Handle token validation errors
+    if (error.message?.includes('NO_TOKEN') || error.message?.includes('INVALID_TOKEN') || error.message?.includes('TOKEN_EXPIRED')) {
+      window.location.href = '/login?reason=session_expired';
+      throw new Error('Session expired. Redirecting to login...');
+    }
+    
     throw error;
   }
 };

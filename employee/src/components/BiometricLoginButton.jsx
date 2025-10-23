@@ -19,7 +19,8 @@ const BiometricLoginButton = ({ onSuccess, onError }) => {
     try {
       setDeviceStatus('checking');
       setErrorMessage('');
-      const response = await fetch('http://localhost:5000/api/biometric/health');
+      const API_URL = import.meta.env.VITE_API_URL || 'https://payroll-management-system-blond.vercel.app/api';
+      const response = await fetch(`${API_URL}/biometric/health`);
       const data = await response.json();
 
       if (data.connected) {
@@ -29,7 +30,7 @@ const BiometricLoginButton = ({ onSuccess, onError }) => {
         setErrorMessage(data.message || 'Device not connected');
       }
     } catch (error) {
-      logger.error('Device status check failed:', error);
+      console.error('Device status check failed:', error);
       setDeviceStatus('error');
       setErrorMessage('Failed to check device status');
     }
@@ -46,12 +47,7 @@ const BiometricLoginButton = ({ onSuccess, onError }) => {
     setErrorMessage('');
 
     try {
-      // Call the biometric login endpoint
-      try {
-      setIsLoading(true);
-      setError(null);
-
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const API_URL = import.meta.env.VITE_API_URL || 'https://payroll-management-system-blond.vercel.app/api';
       const response = await fetch(`${API_URL}/biometric/login`, {
         method: 'POST',
         headers: {
@@ -93,7 +89,7 @@ const BiometricLoginButton = ({ onSuccess, onError }) => {
       }
 
     } catch (error) {
-      logger.error('Biometric login error:', error);
+      console.error('Biometric login error:', error);
       setScanStatus('error');
       const errorMsg = 'Network error during biometric login';
       setErrorMessage(errorMsg);

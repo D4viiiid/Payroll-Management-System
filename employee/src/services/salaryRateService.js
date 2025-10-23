@@ -11,15 +11,18 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const validateToken = () => {
   const token = localStorage.getItem('token');
   
-  // Check 1: Token exists
-  if (!token) {
+  // Check 1: Token exists and is not null/undefined/empty
+  if (!token || token === 'null' || token === 'undefined' || token.trim() === '') {
     console.error('❌ NO TOKEN: User is not logged in');
+    console.error('   Token value in localStorage:', token);
+    localStorage.removeItem('token'); // Clear invalid token
     throw new Error('NO_TOKEN: Please login to continue.');
   }
   
   // Check 2: Token is a string (not null, undefined, or object)
   if (typeof token !== 'string') {
     console.error('❌ INVALID TOKEN TYPE: Token is not a string');
+    console.error('   Token type:', typeof token);
     localStorage.removeItem('token');
     throw new Error('INVALID_TOKEN: Please login again.');
   }
@@ -30,7 +33,9 @@ const validateToken = () => {
     console.error('❌ INVALID TOKEN FORMAT: Token does not have 3 parts');
     console.error('   Token value:', token.substring(0, 100) + '...');
     console.error('   Parts found:', parts.length);
+    console.error('   Token is likely corrupted or is string "undefined"');
     localStorage.removeItem('token'); // Clear invalid token
+    localStorage.removeItem('user'); // Also clear user data
     throw new Error('INVALID_TOKEN: Please login again.');
   }
   
@@ -44,6 +49,7 @@ const validateToken = () => {
       if (currentTime >= expirationTime) {
         console.error('❌ TOKEN EXPIRED:', new Date(expirationTime).toISOString());
         localStorage.removeItem('token'); // Clear expired token
+        localStorage.removeItem('user');
         throw new Error('TOKEN_EXPIRED: Your session has expired. Please login again.');
       }
       
@@ -58,6 +64,7 @@ const validateToken = () => {
     }
     console.error('❌ TOKEN DECODE ERROR:', decodeError.message);
     localStorage.removeItem('token'); // Clear malformed token
+    localStorage.removeItem('user');
     throw new Error('INVALID_TOKEN: Token is malformed. Please login again.');
   }
   
@@ -98,9 +105,12 @@ export const getSalaryRateHistory = async (limit = 10) => {
   } catch (error) {
     console.error('❌ Error fetching salary rate history:', error);
     
-    // ✅ Handle token validation errors
+    // ✅ Handle token validation errors - redirect to home page (login)
     if (error.message?.includes('NO_TOKEN') || error.message?.includes('INVALID_TOKEN') || error.message?.includes('TOKEN_EXPIRED')) {
-      window.location.href = '/login?reason=session_expired';
+      // Clear all auth data
+      localStorage.clear();
+      // Redirect to home page (which shows login)
+      window.location.href = '/?session=expired';
       throw new Error('Session expired. Redirecting to login...');
     }
     
@@ -150,19 +160,22 @@ export const createSalaryRate = async (rateData) => {
     console.error('  - Response data:', error.response?.data);
     console.error('  - Response status:', error.response?.status);
     
-    // ✅ CRITICAL FIX: Handle token validation errors
+    // ✅ CRITICAL FIX: Handle token validation errors - redirect to home page (login)
     if (error.message === 'NO_TOKEN' || error.message?.includes('NO_TOKEN')) {
-      window.location.href = '/login?reason=no_token';
+      localStorage.clear();
+      window.location.href = '/?reason=no_token';
       throw new Error('You are not logged in. Redirecting to login...');
     }
     
     if (error.message === 'TOKEN_EXPIRED' || error.message?.includes('TOKEN_EXPIRED')) {
-      window.location.href = '/login?reason=session_expired';
+      localStorage.clear();
+      window.location.href = '/?reason=session_expired';
       throw new Error('Your session has expired. Redirecting to login...');
     }
     
     if (error.message === 'INVALID_TOKEN' || error.message?.includes('INVALID_TOKEN')) {
-      window.location.href = '/login?reason=invalid_token';
+      localStorage.clear();
+      window.location.href = '/?reason=invalid_token';
       throw new Error('Invalid authentication token. Redirecting to login...');
     }
     

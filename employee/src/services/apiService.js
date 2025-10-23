@@ -78,8 +78,7 @@ const fetchApi = async (url, options = {}) => {
       console.error('🔒 Authentication failed (401) - Session expired or invalid token');
       
       // Clear all authentication data
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      localStorage.clear(); // Clear everything to be safe
       
       // Show user-friendly error message
       toast.error('Session expired. Please login again.', {
@@ -87,9 +86,9 @@ const fetchApi = async (url, options = {}) => {
         autoClose: 3000
       });
       
-      // Redirect to login after short delay
+      // Redirect to home page (login) after short delay
       setTimeout(() => {
-        window.location.href = '/login?session=expired';
+        window.location.href = '/?session=expired';
       }, 1500);
       
       throw new Error('Session expired. Please login again.');

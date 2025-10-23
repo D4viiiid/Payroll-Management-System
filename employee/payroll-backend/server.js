@@ -20,6 +20,9 @@ console.log('   EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? '***SET (' + proc
 console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
 console.log('   MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
 
+// 🔄 Force Vercel redeployment - October 23, 2025
+console.log('✅ Backend v1.0.1 - Attendance stats fix deployed');
+
 // Now import everything else AFTER env vars are loaded
 import helmet from 'helmet';
 import morgan from 'morgan';

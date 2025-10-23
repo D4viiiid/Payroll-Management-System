@@ -20,8 +20,8 @@ console.log('   EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? '***SET (' + proc
 console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
 console.log('   MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
 
-// 🔄 Force Vercel redeployment - October 23, 2025 22:00 UTC  
-console.log('✅ Backend v1.0.2 - FORCE REDEPLOY: Attendance stats fix + hardcoded URL fixes');
+// 🔄 Force Vercel redeployment - October 24, 2025 01:15 UTC  
+console.log('✅ Backend v1.0.3 - COMPREHENSIVE FIX: Dashboard stats + Auth tokens + Biometric health');
 console.log('⏰ Deployment Timestamp:', new Date().toISOString());
 
 // Now import everything else AFTER env vars are loaded
@@ -152,7 +152,7 @@ app.get('/', (req, res) => {
   res.json({ 
     success: true,
     message: '🚀 Payroll Management System API - Running',
-    version: '1.0.2',
+    version: '1.0.3',
     status: 'operational',
     timestamp: new Date().toISOString(),
     endpoints: {

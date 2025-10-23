@@ -1,90 +1,93 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
+import biometricService from '../services/biometricService';
+import { employeeApi } from '../services/apiService';
 
 /**
  * BiometricEnrollmentSection - Component for managing employee fingerprints
- * Supports up to 3 fingerprint enrollments per employee
+ * Updated to use Fingerprint Bridge Server
  */
 const BiometricEnrollmentSection = ({ employeeId, onEnrollmentComplete }) => {
   const [fingerprints, setFingerprints] = useState([]);
   const [loading, setLoading] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [deviceStatus, setDeviceStatus] = useState('checking');
-  const [selectedFinger, setSelectedFinger] = useState('unknown');
-
-  const fingerOptions = [
-    { value: 'thumb', label: '👍 Thumb' },
-    { value: 'index', label: '☝️ Index' },
-    { value: 'middle', label: '🖕 Middle' },
-    { value: 'ring', label: '💍 Ring' },
-    { value: 'pinky', label: '🤙 Pinky' },
-    { value: 'unknown', label: '❓ Unknown' }
-  ];
+  const [employeeData, setEmployeeData] = useState(null);
 
   useEffect(() => {
     if (employeeId) {
       checkDeviceStatus();
-      loadFingerprints();
+      loadEmployeeData();
     }
   }, [employeeId]);
 
   const checkDeviceStatus = async () => {
     try {
       setDeviceStatus('checking');
-      const response = await fetch('/api/biometric-integrated/device/health');
-      const data = await response.json();
-      setDeviceStatus(data.connected ? 'connected' : 'disconnected');
+      const isConnected = await biometricService.checkBridgeHealth();
+      setDeviceStatus(isConnected ? 'connected' : 'disconnected');
     } catch (error) {
       console.error('Error checking device:', error);
       setDeviceStatus('disconnected');
     }
   };
 
-  const loadFingerprints = async () => {
+  const loadEmployeeData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/biometric-integrated/fingerprints/${employeeId}`);
-      const data = await response.json();
+      const employee = await employeeApi.getById(employeeId);
+      setEmployeeData(employee);
       
-      if (data.success) {
-        setFingerprints(data.fingerprints || []);
+      // Check if fingerprint is already enrolled
+      if (employee.fingerprintEnrolled) {
+        setFingerprints([{ id: 1, enrolled: true }]);
+      } else {
+        setFingerprints([]);
       }
     } catch (error) {
-      console.error('Error loading fingerprints:', error);
-      toast.error('Failed to load fingerprints');
+      console.error('Error loading employee:', error);
+      toast.error('Failed to load employee data');
     } finally {
       setLoading(false);
     }
   };
 
   const handleEnrollFingerprint = async () => {
-    if (fingerprints.length >= 3) {
-      toast.warning('Maximum 3 fingerprints allowed. Please delete one first.');
+    if (fingerprints.length >= 1 && fingerprints[0]?.enrolled) {
+      toast.warning('Fingerprint already enrolled for this employee.');
       return;
     }
 
     if (deviceStatus !== 'connected') {
-      toast.error('Biometric device not connected. Please connect device and try again.');
+      toast.error('Bridge server not connected. Please run START_BRIDGE.bat first.');
+      return;
+    }
+
+    if (!employeeData) {
+      toast.error('Employee data not loaded');
       return;
     }
 
     try {
       setEnrolling(true);
-      toast.info('Please place your finger on the scanner...', { autoClose: false, toastId: 'fingerprint-scan' });
-
-      const response = await fetch(`/api/biometric-integrated/enroll/${employeeId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ finger: selectedFinger })
+      toast.info('👆 Please scan your finger 3 times on the scanner...', { 
+        autoClose: false, 
+        toastId: 'fingerprint-scan' 
       });
 
-      const data = await response.json();
-      
+      // Call bridge server to enroll fingerprint
+      const data = await biometricService.enrollEmployee({
+        _id: employeeId,
+        firstName: employeeData.firstName,
+        lastName: employeeData.lastName,
+        email: employeeData.email
+      });
+
       toast.dismiss('fingerprint-scan');
 
       if (data.success) {
         toast.success('✅ Fingerprint enrolled successfully!');
-        await loadFingerprints();
+        await loadEmployeeData();
         if (onEnrollmentComplete) {
           onEnrollmentComplete(data);
         }
@@ -94,7 +97,7 @@ const BiometricEnrollmentSection = ({ employeeId, onEnrollmentComplete }) => {
     } catch (error) {
       console.error('Error enrolling fingerprint:', error);
       toast.dismiss('fingerprint-scan');
-      toast.error('Error enrolling fingerprint: ' + error.message);
+      toast.error('Error: ' + (error.response?.data?.message || error.message || 'Failed to connect to bridge server'));
     } finally {
       setEnrolling(false);
     }

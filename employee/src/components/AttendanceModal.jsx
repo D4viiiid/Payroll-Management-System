@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { logger } from '../utils/logger.js';
+import biometricService from '../services/biometricService';
 import notifSound from '../assets/notif.mp3';
 
 /**
  * AttendanceModal - Modal for recording Time In/Time Out via fingerprint
+ * Updated to use Fingerprint Bridge Server
  */
 const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
   const [processing, setProcessing] = useState(false);
@@ -15,29 +17,56 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
 
   useEffect(() => {
     if (isOpen) {
-      checkDeviceStatus();
       loadCurrentUserAttendance();
+      checkDeviceStatus();
+      
+      // Start auto health check (polls every 5 seconds)
+      biometricService.startAutoHealthCheck((isHealthy) => {
+        const status = biometricService.getCurrentStatus();
+        
+        if (status.serverRunning && status.deviceConnected) {
+          setDeviceStatus('connected');
+          setDeviceMessage('✅ ZKTeco device ready on localhost:3003');
+        } else if (status.serverRunning && !status.deviceConnected) {
+          setDeviceStatus('disconnected');
+          setDeviceMessage('⚠️ Bridge running, but no ZKTeco device detected. Please plug in the scanner.');
+        } else {
+          setDeviceStatus('disconnected');
+          setDeviceMessage('❌ Bridge server not running. Service may be stopped or not installed.');
+        }
+      });
     }
+
+    // Cleanup on unmount
+    return () => {
+      if (isOpen) {
+        biometricService.stopAutoHealthCheck();
+      }
+    };
   }, [isOpen]);
 
   const checkDeviceStatus = async () => {
     try {
       setDeviceStatus('checking');
-      const response = await fetch('/api/biometric-integrated/device/health');
-      const data = await response.json();
-      // Save optional message for UI
-      if (data && data.message) {
-        setDeviceMessage(data.message);
+      setDeviceMessage('Checking device connection...');
+      
+      // Get detailed device status
+      const statusData = await biometricService.getDeviceStatus();
+      
+      if (statusData.connected) {
+        setDeviceStatus('connected');
+        setDeviceMessage('✅ ' + statusData.message);
       } else {
-        setDeviceMessage('');
+        setDeviceStatus('disconnected');
+        setDeviceMessage('⚠️ ' + statusData.message);
       }
-      setDeviceStatus(data.connected ? 'connected' : 'disconnected');
     } catch (error) {
       logger.error('Error checking device:', error);
       setDeviceStatus('disconnected');
+      setDeviceMessage('❌ Cannot connect to bridge server');
     }
   };
-  const [deviceMessage, setDeviceMessage] = useState('');
+  const [deviceMessage, setDeviceMessage] = useState('Checking...');
 
   const loadCurrentUserAttendance = () => {
     try {
@@ -54,25 +83,21 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
 
   const handleTimeInOut = async () => {
     if (deviceStatus !== 'connected') {
-      toast.error('Biometric device not connected. Please connect device and try again.');
+      toast.error('Bridge server not connected. Please run START_BRIDGE.bat first.');
       return;
     }
 
     try {
       setProcessing(true);
       
-      const toastId = toast.info('Please place your finger on the scanner...', { 
+      const toastId = toast.info('👆 Please place your finger on the scanner...', { 
         autoClose: false,
         closeButton: false
       });
 
-      const response = await fetch('/api/biometric-integrated/attendance/record', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
+      // Call bridge server to record attendance
+      const data = await biometricService.recordAttendance();
 
-      const data = await response.json();
-      
       toast.dismiss(toastId);
 
       if (data.success) {
@@ -81,13 +106,14 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
           audioRef.current.play().catch(err => logger.error('Error playing sound:', err));
         }
         
-        const action = data.action === 'time_in' ? 'Time In' : 'Time Out';
-        toast.success(`✅ ${action} recorded successfully!`, {
+        const employeeName = data.employee ? `${data.employee.firstName} ${data.employee.lastName}` : 'Unknown';
+        const timeLabel = data.attendance?.timeOut ? 'Time Out' : 'Time In';
+        
+        toast.success(`✅ ${timeLabel} recorded for ${employeeName}!`, {
           autoClose: 3000
         });
 
-        // ✅ FIX ISSUE #1: Emit event to update dashboard immediately
-        // Import eventBus dynamically to avoid circular dependencies
+        // ✅ Emit event to update dashboard immediately
         import('../services/apiService').then(({ eventBus }) => {
           eventBus.emit('attendance-recorded', data);
         });
@@ -100,11 +126,11 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
           onClose();
         }, 2000);
       } else {
-        toast.error(data.message || 'Failed to record attendance');
+        toast.error(data.message || 'Fingerprint not recognized. Please try again.');
       }
     } catch (error) {
       logger.error('Error recording attendance:', error);
-      toast.error('Error recording attendance: ' + error.message);
+      toast.error('Error: ' + (error.message || 'Failed to connect to bridge server'));
     } finally {
       setProcessing(false);
     }
@@ -220,9 +246,9 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
 
           {deviceStatus !== 'connected' && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800 font-medium">⚠️ Device Not Connected</p>
+              <p className="text-sm text-red-800 font-medium">⚠️ Bridge Server Not Connected</p>
               <p className="text-xs text-red-700 mt-1">
-                Please connect the ZKTeco biometric scanner and refresh the device status.
+                Please start the bridge server by running <code className="bg-red-100 px-1 rounded">START_BRIDGE.bat</code> in the <code className="bg-red-100 px-1 rounded">employee/fingerprint-bridge</code> folder.
               </p>
             </div>
           )}

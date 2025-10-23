@@ -282,8 +282,15 @@ router.get('/attendance/stats', async (req, res) => {
                 .lean()
                 .exec(),
                 
-                // ✅ FIX ISSUE #1: Count only ACTIVE employees for accurate absent calculation
-                Employee.countDocuments({ isActive: true }).exec()
+                // ✅ CRITICAL BUG FIX: Robust employee count query
+                // Handle both explicit true and undefined/missing isActive field
+                Employee.countDocuments({ 
+                    $or: [
+                        { isActive: true },
+                        { isActive: { $exists: false } }, // Include docs without isActive field
+                        { isActive: { $ne: false } } // Include any value except explicit false
+                    ]
+                }).exec()
             ]);
             
             todayRecords = records;
@@ -291,7 +298,30 @@ router.get('/attendance/stats', async (req, res) => {
             
             const queryTime = Date.now() - startTime;
             console.log(`📊 Found ${todayRecords.length} attendance records for today in ${queryTime}ms`);
-            console.log(`📊 Total employees: ${totalEmployees}`);
+            console.log(`📊 Total active employees: ${totalEmployees}`);
+            
+            // ✅ VALIDATION: Ensure totalEmployees is reasonable (not 0 or 1 when we expect more)
+            if (totalEmployees === 0 || totalEmployees === 1) {
+                console.warn(`⚠️ WARNING: totalEmployees = ${totalEmployees} seems incorrect!`);
+                console.warn(`⚠️ Retrying with direct collection query...`);
+                
+                // Fallback: Direct collection query
+                try {
+                    const mongoose = (await import('mongoose')).default;
+                    const directCount = await mongoose.connection.db
+                        .collection('employees')
+                        .countDocuments({ isActive: { $ne: false } });
+                    
+                    console.log(`📊 Direct collection query result: ${directCount}`);
+                    
+                    if (directCount > totalEmployees) {
+                        console.log(`✅ Using direct count: ${directCount}`);
+                        totalEmployees = directCount;
+                    }
+                } catch (fallbackError) {
+                    console.error('❌ Fallback query failed:', fallbackError);
+                }
+            }
         } else {
             // Use local storage
             todayRecords = localAttendanceStorage.getTodayAttendance();

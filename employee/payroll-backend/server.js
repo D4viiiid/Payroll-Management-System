@@ -147,6 +147,28 @@ app.use('/api', ensureDBConnection);
 app.use("/api/biometric", biometricRoutes);
 app.use("/api/biometric-integrated", biometricIntegrated); // New integrated routes
 app.use('/api/employees', employeeRouter);
+// 🏠 Root endpoint - Fix "Cannot GET /" error
+app.get('/', (req, res) => {
+  res.json({ 
+    success: true,
+    message: '🚀 Payroll Management System API - Running',
+    version: '1.0.2',
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      employees: '/api/employees',
+      attendance: '/api/attendance',
+      deductions: '/api/deductions',
+      payrolls: '/api/payrolls',
+      salary: '/api/salary',
+      biometric: '/api/biometric',
+      fingerprint: '/api/fingerprint',
+      salaryRate: '/api/salary-rate'
+    },
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
 app.use('/api/deductions', deductionRouter);
 app.use('/api/payrolls', payrollRouter);
 app.use('/api/salary', salaryRouter);

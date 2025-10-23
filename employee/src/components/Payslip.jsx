@@ -59,7 +59,8 @@ const Payslip = () => {
   const handleDownloadPdf = async (payrollId) => {
     setDownloadingPdf(payrollId);
     try {
-      const response = await fetch(`http://localhost:5000/api/enhanced-payroll/payslip/${payrollId}/download`, {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL.replace('/api', '')}/api/enhanced-payroll/payslip/${payrollId}/download`, {
         method: 'GET',
         headers: {
           'Accept': 'application/pdf',
@@ -106,7 +107,8 @@ const Payslip = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/payrolls/${payrollId}/status`, {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL.replace('/api', '')}/api/payrolls/${payrollId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

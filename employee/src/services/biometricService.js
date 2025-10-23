@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { logger } from '../utils/logger.js';
 
-const BIOMETRIC_API = 'http://localhost:5000/api/biometric';
+const BIOMETRIC_API = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/biometric`;
 const FINGERPRINT_API = 'http://localhost:5001/api';
 
 class BiometricService {

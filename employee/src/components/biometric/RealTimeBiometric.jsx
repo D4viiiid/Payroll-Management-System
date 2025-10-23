@@ -13,7 +13,8 @@ const RealTimeBiometric = ({ employee, onEnrollmentComplete, onCredentialsGenera
 
   useEffect(() => {
     // Connect to Python biometric server
-    const newSocket = io('http://localhost:5000');
+    const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+    const newSocket = io(backendUrl);
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
@@ -74,7 +75,8 @@ const RealTimeBiometric = ({ employee, onEnrollmentComplete, onCredentialsGenera
   const connectDevice = async () => {
     try {
       setConnectionStatus('connecting');
-      const response = await axios.post('http://localhost:5000/api/biometric/connect');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await axios.post(`${API_URL}/biometric/connect`);
       if (response.data.success) {
         setConnectionStatus('connected');
       } else {
@@ -99,7 +101,8 @@ const RealTimeBiometric = ({ employee, onEnrollmentComplete, onCredentialsGenera
 
     try {
       setEnrollmentStatus('Starting enrollment... Please wait.');
-      await axios.post('http://localhost:5000/api/biometric/enroll', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      await axios.post(`${API_URL}/biometric/enroll`, {
         employee_id: employee.employeeId || 'temp',
         name: `${employee.firstName} ${employee.lastName}`
       });

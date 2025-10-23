@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://payroll-management-system-blond.vercel.app/api/:path*"
+      "destination": "https://payroll-management-system-cyan.vercel.app/api/:path*"
     },
     {
       "source": "/(.*)",

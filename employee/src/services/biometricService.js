@@ -18,8 +18,11 @@ class BiometricService {
   /**
    * Check if fingerprint bridge server is running
    * @returns {Promise<boolean>} - True if server is running
+   * ✅ FIX: Suppress errors in production environment
    */
   async checkBridgeHealth() {
+    const isProduction = import.meta.env.VITE_APP_ENV === 'production';
+    
     try {
       const response = await fetch(`${BRIDGE_URL}/health`, {
         method: 'GET',
@@ -33,7 +36,11 @@ class BiometricService {
       
       return data.success && data.deviceConnected;
     } catch (error) {
-      console.error('❌ Bridge server not reachable:', error);
+      // ✅ Only log errors in development to avoid console spam in production
+      if (!isProduction) {
+        console.error('❌ Bridge server not reachable:', error);
+      }
+      
       this.deviceStatus.serverRunning = false;
       this.deviceStatus.deviceConnected = false;
       this.deviceStatus.lastCheck = new Date();
@@ -44,8 +51,11 @@ class BiometricService {
   /**
    * Get detailed device status
    * @returns {Promise<Object>} - Device status object
+   * ✅ FIX: Suppress errors in production environment
    */
   async getDeviceStatus() {
+    const isProduction = import.meta.env.VITE_APP_ENV === 'production';
+    
     try {
       const response = await fetch(`${BRIDGE_URL}/device/status`);
       const data = await response.json();
@@ -56,12 +66,18 @@ class BiometricService {
       
       return data;
     } catch (error) {
-      console.error('❌ Cannot get device status:', error);
+      // ✅ Only log errors in development to avoid console spam in production
+      if (!isProduction) {
+        console.error('❌ Cannot get device status:', error);
+      }
+      
       return {
         success: false,
         connected: false,
-        status: 'error',
-        message: 'Bridge server not running. Please start the Fingerprint Bridge Service.'
+        status: isProduction ? 'not-available-in-production' : 'error',
+        message: isProduction 
+          ? 'Fingerprint scanner is only available on local machine (not in cloud deployment).'
+          : 'Bridge server not running. Please start the Fingerprint Bridge Service.'
       };
     }
   }
@@ -69,16 +85,32 @@ class BiometricService {
   /**
    * Start auto health checking (polls every 5 seconds)
    * @param {Function} callback - Called when status changes
+   * ✅ FIX: Disable auto health checks in production (bridge server is local-only)
    */
   startAutoHealthCheck(callback) {
+    // ✅ CRITICAL FIX: Skip auto health checks in production environment
+    // Bridge server runs locally (localhost:3003) for USB fingerprint device
+    // Cannot run in cloud deployment, so disable automatic polling in production
+    const isProduction = import.meta.env.VITE_APP_ENV === 'production';
+    
+    if (isProduction) {
+      console.log('🔇 Bridge health checks disabled in production (fingerprint bridge is local-only)');
+      // Set status to indicate bridge is not available in production
+      this.deviceStatus.serverRunning = false;
+      this.deviceStatus.deviceConnected = false;
+      this.deviceStatus.lastCheck = new Date();
+      if (callback) callback(false);
+      return; // Exit early - no polling in production
+    }
+    
     if (this.healthCheckInterval) {
       this.stopAutoHealthCheck();
     }
 
-    // Check immediately
+    // Check immediately (development only)
     this.checkBridgeHealth().then(callback);
 
-    // Then check every 5 seconds
+    // Then check every 5 seconds (development only)
     this.healthCheckInterval = setInterval(async () => {
       const isHealthy = await this.checkBridgeHealth();
       if (callback) callback(isHealthy);

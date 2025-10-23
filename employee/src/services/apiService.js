@@ -72,6 +72,29 @@ const fetchApi = async (url, options = {}) => {
     
     const response = await fetch(url, mergedOptions);
     
+    // ✅ CRITICAL FIX: Handle 401 Unauthorized globally
+    // If session expired or token invalid, clear storage and redirect to login
+    if (response.status === 401) {
+      console.error('🔒 Authentication failed (401) - Session expired or invalid token');
+      
+      // Clear all authentication data
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
+      // Show user-friendly error message
+      toast.error('Session expired. Please login again.', {
+        position: 'top-center',
+        autoClose: 3000
+      });
+      
+      // Redirect to login after short delay
+      setTimeout(() => {
+        window.location.href = '/login?session=expired';
+      }, 1500);
+      
+      throw new Error('Session expired. Please login again.');
+    }
+    
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.message || `HTTP error ${response.status}`);

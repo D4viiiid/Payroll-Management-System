@@ -265,12 +265,21 @@ router.get('/attendance/stats', async (req, res) => {
         const tomorrow = getEndOfDay();
         tomorrow.setDate(tomorrow.getDate() + 1);
         
-        console.log(`📊 Fetching attendance stats for ${getDateOnly()}`);
+        console.log('📊 ========== ATTENDANCE STATS DEBUG ==========');
+        console.log('📊 Server time (UTC):', new Date().toISOString());
+        console.log('📊 Philippines time:', getPhilippinesNow().toISOString());
+        console.log('📊 Date only:', getDateOnly());
+        console.log('📊 Query range START:', today.toISOString());
+        console.log('📊 Query range END:', tomorrow.toISOString());
         
         let todayRecords = [];
         let totalEmployees = 0;
 
         if (isMongoConnected()) {
+            // ✅ CRITICAL DEBUG: Check total attendance records first
+            const allRecords = await Attendance.countDocuments({ archived: false });
+            console.log(`📊 Total attendance records in DB (not archived): ${allRecords}`);
+            
             // ✅ CRITICAL PERFORMANCE FIX: Run queries in parallel
             const [records, empCount] = await Promise.all([
                 // Use lean() for 5-10x faster queries, select only needed fields
@@ -297,13 +306,28 @@ router.get('/attendance/stats', async (req, res) => {
             totalEmployees = empCount;
             
             const queryTime = Date.now() - startTime;
-            console.log(`📊 Found ${todayRecords.length} attendance records for today in ${queryTime}ms`);
+            console.log(`📊 Found ${todayRecords.length} attendance records for TODAY in ${queryTime}ms`);
             console.log(`📊 Total active employees: ${totalEmployees}`);
+            
+            // ✅ CRITICAL DEBUG: Log each record for today
+            if (todayRecords.length > 0) {
+                console.log('📊 TODAY\'S ATTENDANCE RECORDS:');
+                todayRecords.forEach((record, index) => {
+                    console.log(`   ${index + 1}. Employee: ${record.employeeId}, TimeIn: ${record.timeIn?.toISOString()}, TimeOut: ${record.timeOut?.toISOString() || 'N/A'}, Status: ${record.status}, DayType: ${record.dayType}`);
+                });
+            } else {
+                console.log('⚠️  NO ATTENDANCE RECORDS FOUND FOR TODAY!');
+                console.log('⚠️  This could mean:');
+                console.log('    1. No employees have clocked in yet today');
+                console.log('    2. Date timezone mismatch (server vs database)');
+                console.log('    3. All records are archived');
+                console.log('    4. Date field is stored in different format');
+            }
             
             // ✅ VALIDATION: Ensure totalEmployees is reasonable (not 0 or 1 when we expect more)
             if (totalEmployees === 0 || totalEmployees === 1) {
-                console.warn(`⚠️ WARNING: totalEmployees = ${totalEmployees} seems incorrect!`);
-                console.warn(`⚠️ Retrying with direct collection query...`);
+                console.warn(`⚠️  WARNING: totalEmployees = ${totalEmployees} seems incorrect!`);
+                console.warn(`⚠️  Retrying with direct collection query...`);
                 
                 // Fallback: Direct collection query
                 try {
@@ -389,8 +413,16 @@ router.get('/attendance/stats', async (req, res) => {
 
         const endTime = Date.now();
         const totalTime = endTime - startTime;
-        console.log(`📊 Stats: Present=${present}, FullDay=${fullDay}, HalfDay=${halfDay}, Invalid=${invalid}, Absent=${absent}, TotalEmployees=${totalEmployees}, TotalAttended=${totalAttended}`);
+        console.log(`📊 FINAL STATS:`);
+        console.log(`   Present (working now): ${present}`);
+        console.log(`   Full Day (completed): ${fullDay}`);
+        console.log(`   Half Day: ${halfDay}`);
+        console.log(`   Invalid (<4 hrs): ${invalid}`);
+        console.log(`   Absent: ${absent}`);
+        console.log(`   Total Employees: ${totalEmployees}`);
+        console.log(`   Total Attended: ${totalAttended}`);
         console.log(`⚡ Total processing time: ${totalTime}ms`);
+        console.log('📊 ========================================\n');
 
         res.json({
             totalPresent: present,  // Currently working (no timeOut)

@@ -7,6 +7,50 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
  * Manage dynamic salary rates across the system
  */
 
+// ✅ CRITICAL FIX: Token validation helper
+const validateToken = () => {
+  const token = localStorage.getItem('token');
+  
+  if (!token) {
+    console.error('❌ NO TOKEN: User is not logged in');
+    throw new Error('NO_TOKEN: Please login to continue.');
+  }
+  
+  // ✅ Validate token format (JWT should have 3 parts: header.payload.signature)
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    console.error('❌ INVALID TOKEN FORMAT: Token does not have 3 parts');
+    localStorage.removeItem('token'); // Clear invalid token
+    throw new Error('INVALID_TOKEN: Please login again.');
+  }
+  
+  // ✅ Check token expiration (decode payload and check 'exp' claim)
+  try {
+    const payload = JSON.parse(atob(parts[1])); // Decode base64 payload
+    if (payload.exp) {
+      const expirationTime = payload.exp * 1000; // Convert to milliseconds
+      const currentTime = Date.now();
+      
+      if (currentTime >= expirationTime) {
+        console.error('❌ TOKEN EXPIRED:', new Date(expirationTime).toISOString());
+        localStorage.removeItem('token'); // Clear expired token
+        throw new Error('TOKEN_EXPIRED: Your session has expired. Please login again.');
+      }
+      
+      // Log remaining time
+      const remainingTime = expirationTime - currentTime;
+      const remainingDays = Math.floor(remainingTime / (1000 * 60 * 60 * 24));
+      console.log(`✅ Token valid - Expires in ${remainingDays} days`);
+    }
+  } catch (decodeError) {
+    console.error('❌ TOKEN DECODE ERROR:', decodeError.message);
+    localStorage.removeItem('token'); // Clear malformed token
+    throw new Error('INVALID_TOKEN: Token is malformed. Please login again.');
+  }
+  
+  return token;
+};
+
 // Get current active salary rate
 export const getCurrentSalaryRate = async () => {
   try {
@@ -61,20 +105,12 @@ export const getSalaryRateForDate = async (date) => {
 // Create new salary rate (admin only)
 export const createSalaryRate = async (rateData) => {
   try {
-    const token = localStorage.getItem('token');
+    // ✅ CRITICAL FIX: Validate token BEFORE making request
+    const token = validateToken(); // Will throw if token is missing/invalid/expired
     
-    // ✅ FIX: Add comprehensive logging for debugging
-    console.log('🔐 Salary Rate Service - Token Check:');
-    console.log('  - Token exists:', !!token);
-    console.log('  - Token length:', token ? token.length : 0);
-    console.log('  - Token preview:', token ? token.substring(0, 50) + '...' : 'NO TOKEN');
+    console.log('🔐 Salary Rate Service - Token Validated Successfully');
     console.log('  - API URL:', `${API_URL}/salary-rate`);
     console.log('  - Rate Data:', rateData);
-    
-    if (!token) {
-      console.error('❌ NO TOKEN FOUND! User might not be logged in.');
-      throw new Error('Authentication token not found. Please login again.');
-    }
     
     const response = await axios.post(`${API_URL}/salary-rate`, rateData, {
       headers: {
@@ -91,7 +127,23 @@ export const createSalaryRate = async (rateData) => {
     console.error('  - Response data:', error.response?.data);
     console.error('  - Response status:', error.response?.status);
     
-    // ✅ Provide user-friendly error messages
+    // ✅ CRITICAL FIX: Handle token validation errors
+    if (error.message === 'NO_TOKEN' || error.message?.includes('NO_TOKEN')) {
+      window.location.href = '/login?reason=no_token';
+      throw new Error('You are not logged in. Redirecting to login...');
+    }
+    
+    if (error.message === 'TOKEN_EXPIRED' || error.message?.includes('TOKEN_EXPIRED')) {
+      window.location.href = '/login?reason=session_expired';
+      throw new Error('Your session has expired. Redirecting to login...');
+    }
+    
+    if (error.message === 'INVALID_TOKEN' || error.message?.includes('INVALID_TOKEN')) {
+      window.location.href = '/login?reason=invalid_token';
+      throw new Error('Invalid authentication token. Redirecting to login...');
+    }
+    
+    // ✅ Provide user-friendly error messages for API errors
     if (error.response?.status === 401) {
       throw new Error('Authentication failed. Your session may have expired. Please login again.');
     } else if (error.response?.status === 403) {

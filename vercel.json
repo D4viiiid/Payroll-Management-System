@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "employee/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "employee/dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "https://payroll-management-system-blond.vercel.app/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/employee/dist/$1"
+    }
+  ]
+}

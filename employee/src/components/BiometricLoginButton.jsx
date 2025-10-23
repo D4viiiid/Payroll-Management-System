@@ -47,7 +47,12 @@ const BiometricLoginButton = ({ onSuccess, onError }) => {
 
     try {
       // Call the biometric login endpoint
-      const response = await fetch('http://localhost:5000/api/biometric/login', {
+      try {
+      setIsLoading(true);
+      setError(null);
+
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/biometric/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

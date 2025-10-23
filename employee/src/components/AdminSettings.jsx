@@ -123,7 +123,10 @@ const AdminSettings = () => {
         payload.newPin = formData.newPin;
       }
 
-      const response = await fetch('http://localhost:5000/api/employees/admin/change-credentials', {
+      console.log('Changing admin credentials:', formData);
+      
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/employees/admin/change-credentials`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

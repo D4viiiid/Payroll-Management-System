@@ -9,6 +9,8 @@ import { validateTimeInRealTime, validateAndCalculateAttendance } from '../utils
 import moment from 'moment-timezone';
 import { validateNoSunday } from '../middleware/validateDates.js';
 import { getPhilippinesNow, getStartOfDay, getEndOfDay, getDateOnly, formatTime } from '../utils/dateHelpers.js';
+
+// Version: 1.0.3 - Fixed attendance stats to count only active employees (Oct 23, 2025)
 import { validateAttendanceForFraud, validateNoMultipleOpenShifts } from '../middleware/fraudPrevention.js';
 import { getPaginationParams, createPaginatedResponse, optimizeMongooseQuery } from '../utils/paginationHelper.js';
 import { setCacheHeaders } from '../middleware/cacheMiddleware.js';

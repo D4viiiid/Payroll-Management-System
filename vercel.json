@@ -1,22 +1,26 @@
 {
-  "version": 2,
-  "builds": [
+  "buildCommand": "cd employee && npm install && npm run build",
+  "outputDirectory": "employee/dist",
+  "framework": "vite",
+  "rewrites": [
     {
-      "src": "employee/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "employee/dist"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "https://payroll-management-system-blond.vercel.app/api/$1"
+      "source": "/api/:path*",
+      "destination": "https://payroll-management-system-blond.vercel.app/api/:path*"
     },
     {
-      "src": "/(.*)",
-      "dest": "/employee/dist/$1"
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
     }
   ]
 }

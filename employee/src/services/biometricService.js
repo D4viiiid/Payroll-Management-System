@@ -182,7 +182,7 @@ class BiometricService {
         throw new Error('Bridge server not available. Please install and start the Fingerprint Bridge Service.');
       }
 
-      const response = await axios.post(`${bridgeUrl}/fingerprint/enroll`, {
+      const response = await axios.post(`${bridgeUrl}/api/fingerprint/enroll`, {
         employeeId: employeeData._id,
         firstName: employeeData.firstName,
         lastName: employeeData.lastName,
@@ -205,7 +205,7 @@ class BiometricService {
         throw new Error('Bridge server not available. Please install and start the Fingerprint Bridge Service.');
       }
 
-      const response = await axios.post(`${bridgeUrl}/fingerprint/login`);
+      const response = await axios.post(`${bridgeUrl}/api/fingerprint/login`);
       return response.data;
     } catch (error) {
       console.error('❌ Fingerprint login failed:', error);
@@ -214,7 +214,7 @@ class BiometricService {
   }
 
   /**
-   * Capture single fingerprint (for verification)
+   * Capture fingerprint (for verification)
    */
   async captureFingerprint() {
     try {
@@ -223,7 +223,7 @@ class BiometricService {
         throw new Error('Bridge server not available. Please install and start the Fingerprint Bridge Service.');
       }
 
-      const response = await axios.post(`${bridgeUrl}/fingerprint/capture`);
+      const response = await axios.post(`${bridgeUrl}/api/fingerprint/capture`);
       return response.data;
     } catch (error) {
       console.error('❌ Fingerprint capture failed:', error);
@@ -241,7 +241,7 @@ class BiometricService {
         throw new Error('Bridge server not available. Please install and start the Fingerprint Bridge Service.');
       }
 
-      const response = await axios.post(`${bridgeUrl}/attendance/record`);
+      const response = await axios.post(`${bridgeUrl}/api/attendance/record`);
       return response.data;
     } catch (error) {
       console.error('❌ Attendance recording failed:', error);

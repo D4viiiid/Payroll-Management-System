@@ -63,13 +63,15 @@ echo   - requests          (HTTP client)
 echo   - dnspython         (DNS resolution)
 echo.
 
-REM Install with specific versions to ensure compatibility
-pip install pyzkfp==0.1.5 pymongo python-dotenv pillow requests dnspython --quiet
+REM ✅ CRITICAL FIX: Install to system-wide location so Windows Service (SYSTEM account) can access
+REM Instead of using --user (installs to user folder), install directly to Python's site-packages
+echo Installing Python packages system-wide for Windows Service compatibility...
+pip install --force-reinstall pyzkfp==0.1.5 pymongo python-dotenv pillow requests dnspython --quiet
 if %errorLevel% neq 0 (
     echo.
     echo ⚠️  WARNING: Some packages failed with specific versions
     echo Trying without version constraints...
-    pip install pyzkfp pymongo python-dotenv pillow requests dnspython
+    pip install --force-reinstall pyzkfp pymongo python-dotenv pillow requests dnspython
     if %errorLevel% neq 0 (
         echo.
         echo ❌ ERROR: Failed to install Python dependencies!
@@ -79,6 +81,7 @@ if %errorLevel% neq 0 (
         echo   2. Try upgrading pip: python -m pip install --upgrade pip
         echo   3. Install Visual C++ Build Tools if needed:
         echo      https://visualstudio.microsoft.com/visual-cpp-build-tools/
+        echo   4. Make sure you're running this installer as Administrator!
         echo.
         pause
         exit /b 1
@@ -99,6 +102,20 @@ if %errorLevel% neq 0 (
     echo ❌ pymongo import failed! Installation incomplete.
     pause
     exit /b 1
+)
+
+REM ✅ NEW: Verify pyzkfp is installed system-wide (not in user folder)
+echo.
+echo Verifying pyzkfp installation location...
+python -c "import pyzkfp; import os; path = pyzkfp.__file__; print(f'📂 pyzkfp location: {path}'); assert 'AppData' not in path and 'Roaming' not in path, 'ERROR: pyzkfp installed in user folder!'; print('✅ pyzkfp correctly installed system-wide')" 2>nul
+if %errorLevel% neq 0 (
+    echo.
+    echo ⚠️  WARNING: pyzkfp may be installed in user folder instead of system-wide!
+    echo This could cause issues when the service runs as SYSTEM account.
+    echo.
+    echo To fix: Run this installer as Administrator and it will reinstall system-wide.
+    echo.
+    pause
 )
 
 echo ✅ All Python dependencies installed and verified

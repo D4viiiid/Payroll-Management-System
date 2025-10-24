@@ -280,6 +280,14 @@ router.get('/attendance/stats', async (req, res) => {
             const allRecords = await Attendance.countDocuments({ archived: false });
             console.log(`📊 Total attendance records in DB (not archived): ${allRecords}`);
             
+            // ✅ CRITICAL DEBUG: Check Employee model and collection
+            console.log(`📊 Employee model collection name: ${Employee.collection.name}`);
+            console.log(`📊 Testing employee count query...`);
+            const testCount = await Employee.countDocuments({});
+            console.log(`📊 Total employees (no filter): ${testCount}`);
+            const activeCount = await Employee.countDocuments({ isActive: { $ne: false } });
+            console.log(`📊 Active employees (isActive != false): ${activeCount}`);
+            
             // ✅ CRITICAL PERFORMANCE FIX: Run queries in parallel
             const [records, empCount] = await Promise.all([
                 // Use lean() for 5-10x faster queries, select only needed fields
@@ -291,14 +299,11 @@ router.get('/attendance/stats', async (req, res) => {
                 .lean()
                 .exec(),
                 
-                // ✅ CRITICAL BUG FIX: Robust employee count query
-                // Handle both explicit true and undefined/missing isActive field
+                // ✅ CRITICAL BUG FIX v2: Simplified employee count query
+                // Count ALL employees where isActive is not explicitly false
+                // This includes: isActive=true, isActive=null, isActive=undefined, or field doesn't exist
                 Employee.countDocuments({ 
-                    $or: [
-                        { isActive: true },
-                        { isActive: { $exists: false } }, // Include docs without isActive field
-                        { isActive: { $ne: false } } // Include any value except explicit false
-                    ]
+                    isActive: { $ne: false } // Simple: count all except explicitly false
                 }).exec()
             ]);
             

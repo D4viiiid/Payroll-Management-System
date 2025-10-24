@@ -5,6 +5,7 @@ import { logger } from "../utils/logger";
 import AttendanceModal from "./AttendanceModal";
 import AdminSidebar from "./AdminSidebar";
 import AdminHeader from "./AdminHeader";
+import FingerprintBridgeStatus from "./FingerprintBridgeStatus";
 import "./Admin.responsive.css";
 
 const Dashboard_2 = () => {
@@ -181,6 +182,9 @@ const Dashboard_2 = () => {
             </div>
 
             <div style={{ padding: '0' }}>
+              {/* ✅ ISSUE #3 FIX: Fingerprint Bridge Connection Status */}
+              <FingerprintBridgeStatus />
+
               {/* Attendance Summary Cards */}
               <div className="stats-grid">
                 {/* Placeholder cards - need to rebuild properly */}

@@ -3,6 +3,7 @@ import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import apiService, { eventBus, startRealTimeUpdates, stopRealTimeUpdates } from '../services/apiService';
 import BiometricEnrollmentSection from './BiometricEnrollmentSection';
+import FingerprintBridgeStatus from './FingerprintBridgeStatus';
 import { logger } from '../utils/logger';
 import './Admin.responsive.css';
 
@@ -896,6 +897,10 @@ const Employees = () => {
                   <h4 style={{ fontSize: '1.125rem', fontWeight: 600, color: '#111827', marginBottom: '1rem' }}>
                     Biometric Enrollment (Optional)
                   </h4>
+                  
+                  {/* ✅ ISSUE #3 FIX: Fingerprint Bridge Status in Employee Page */}
+                  <FingerprintBridgeStatus />
+                  
                   <BiometricEnrollmentSection
                     employeeId={editingEmployee._id}
                     onEnrollmentComplete={(data) => {

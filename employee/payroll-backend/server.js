@@ -157,9 +157,15 @@ app.get('/', (req, res) => {
   res.json({ 
     success: true,
     message: '🚀 Payroll Management System API - Running',
-    version: '1.0.3',
+    version: '1.0.4', // 🚨 CRITICAL: v1.0.4 - Stats fix + Salary history auth fix
     status: 'operational',
     timestamp: new Date().toISOString(),
+    deploymentNote: '✅ CRITICAL FIXES DEPLOYED: Dashboard stats calculation + Salary rate history public',
+    criticalChanges: [
+      'Stats: totalPresent = ALL who timed in (with OR without timeout)',
+      'Stats: absent = totalEmployees - totalPresent',
+      'Salary rate /history endpoint: PUBLIC ACCESS (no auth required)'
+    ],
     endpoints: {
       employees: '/api/employees',
       attendance: '/api/attendance',

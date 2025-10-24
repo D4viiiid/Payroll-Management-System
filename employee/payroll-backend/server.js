@@ -20,9 +20,14 @@ console.log('   EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? '***SET (' + proc
 console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
 console.log('   MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
 
-// 🔄 Force Vercel redeployment - October 24, 2025 01:15 UTC  
-console.log('✅ Backend v1.0.3 - COMPREHENSIVE FIX: Dashboard stats + Auth tokens + Biometric health');
+// 🔄 Force Vercel redeployment - October 24, 2025 05:20 UTC
+// CRITICAL: This deployment MUST include:
+// - Fixed attendance stats (totalPresent = ALL who timed in, absent = total - present)
+// - Public salary rate history endpoint (no auth required for GET /history)
+console.log('✅ Backend v1.0.4 - CRITICAL BACKEND REDEPLOY: Stats logic + Auth fixes');
 console.log('⏰ Deployment Timestamp:', new Date().toISOString());
+console.log('📊 Stats endpoint MUST return correct absent count (9 if no one timed in)');
+console.log('🔐 Salary rate /history endpoint MUST be publicly accessible');
 
 // Now import everything else AFTER env vars are loaded
 import helmet from 'helmet';

@@ -9,6 +9,8 @@ import { toast } from 'react-toastify';
  * 2. Download button for installer if not connected
  * 3. Real-time status updates
  * 4. Installation instructions
+ * 
+ * ✅ FIX: Disabled localhost:3003 polling in production to prevent console errors
  */
 const FingerprintBridgeStatus = () => {
   const [bridgeConnected, setBridgeConnected] = useState(false);
@@ -20,21 +22,33 @@ const FingerprintBridgeStatus = () => {
 
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
   const BRIDGE_URL = 'http://localhost:3003';
+  const IS_PRODUCTION = import.meta.env.VITE_APP_ENV === 'production';
 
   /**
    * Check if local fingerprint bridge is running
+   * ✅ FIX: Skip health checks in production (bridge is local-only)
    */
   const checkBridgeStatus = async () => {
     try {
       setChecking(true);
       
-      // Call localhost:3003 directly from browser
+      // ✅ CRITICAL FIX: Don't try to connect to localhost:3003 in production
+      // The fingerprint bridge runs locally on the user's computer, not on Vercel
+      if (IS_PRODUCTION) {
+        // In production, bridge status can only be determined if user has it installed
+        setBridgeConnected(false);
+        setDeviceConnected(false);
+        setLastCheck(new Date());
+        setChecking(false);
+        return;
+      }
+      
+      // Only check in development environment
       const response = await fetch(`${BRIDGE_URL}/api/health`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
         },
-        // Use a short timeout
         signal: AbortSignal.timeout(3000)
       });
 
@@ -43,7 +57,6 @@ const FingerprintBridgeStatus = () => {
         setBridgeConnected(true);
         setDeviceConnected(data.deviceConnected || false);
         setLastCheck(new Date());
-        console.log('✅ Fingerprint bridge connected:', data);
       } else {
         setBridgeConnected(false);
         setDeviceConnected(false);
@@ -52,7 +65,6 @@ const FingerprintBridgeStatus = () => {
       // Bridge not running or not installed
       setBridgeConnected(false);
       setDeviceConnected(false);
-      console.log('⚠️ Fingerprint bridge not accessible:', error.message);
     } finally {
       setChecking(false);
     }
@@ -60,20 +72,32 @@ const FingerprintBridgeStatus = () => {
 
   /**
    * Download fingerprint bridge installer
+   * ✅ FIX: Use correct API URL format
    */
   const handleDownload = async () => {
     try {
       setDownloading(true);
       toast.info('📦 Preparing download...');
 
-      const response = await fetch(`${API_BASE}/fingerprint-bridge/download`);
+      // ✅ FIX: Remove '/api' from API_BASE since it's already included
+      const downloadUrl = API_BASE.replace('/api', '') + '/api/fingerprint-bridge/download';
+      console.log('Download URL:', downloadUrl);
+      
+      const response = await fetch(downloadUrl);
       
       if (!response.ok) {
-        throw new Error('Download failed');
+        const errorText = await response.text();
+        console.error('Download failed:', response.status, errorText);
+        throw new Error(`Download failed (${response.status})`);
       }
 
       // Create blob from response
       const blob = await response.blob();
+      console.log('Downloaded blob size:', blob.size);
+      
+      if (blob.size < 100) {
+        throw new Error('Downloaded file is too small, may be corrupted');
+      }
       
       // Create download link
       const url = window.URL.createObjectURL(blob);
@@ -84,8 +108,10 @@ const FingerprintBridgeStatus = () => {
       a.click();
       
       // Cleanup
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
 
       toast.success('✅ Download complete! Extract and run INSTALL_AUTO_SERVICE.bat as Administrator');
       setShowInstructions(true);
@@ -99,14 +125,18 @@ const FingerprintBridgeStatus = () => {
   };
 
   // Check status on mount and every 10 seconds
+  // ✅ FIX: Disable auto-refresh in production to prevent console spam
   useEffect(() => {
     checkBridgeStatus();
     
-    const interval = setInterval(() => {
-      checkBridgeStatus();
-    }, 10000); // Check every 10 seconds
+    // Only auto-refresh in development environment
+    if (!IS_PRODUCTION) {
+      const interval = setInterval(() => {
+        checkBridgeStatus();
+      }, 10000); // Check every 10 seconds
 
-    return () => clearInterval(interval);
+      return () => clearInterval(interval);
+    }
   }, []);
 
   return (

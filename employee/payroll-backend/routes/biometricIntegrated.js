@@ -57,9 +57,24 @@ console.log('🐍 Using Python command:', PYTHON_PATH);
 
 /* ------------------------------------------------------
    🔍 Check biometric device health
+   ✅ FIX: Return graceful error in production (Vercel doesn't support USB devices)
 ------------------------------------------------------ */
 router.get("/device/health", async (req, res) => {
   try {
+    // ✅ CRITICAL FIX: Vercel serverless functions cannot access local USB devices
+    // Return appropriate message for production environment
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+    
+    if (isProduction) {
+      return res.status(200).json({
+        success: false,
+        connected: false,
+        message: "Fingerprint scanner is only available on local machines. Please download and install the bridge software on your computer.",
+        productionNote: "USB biometric devices cannot be accessed from cloud servers. Install the bridge software locally.",
+        downloadUrl: "/api/fingerprint-bridge/download"
+      });
+    }
+
     const pythonScript = path.resolve(
       process.cwd(),
       "..",
@@ -72,8 +87,8 @@ router.get("/device/health", async (req, res) => {
 
     const testProcess = spawn(PYTHON_PATH, [pythonScript, "--health"], {
       stdio: "pipe",
-      timeout: 15000, // Increased to 15 seconds for device initialization
-      shell: false, // Run directly to avoid shell parsing issues
+      timeout: 15000,
+      shell: false,
     });
 
     let stdout = "";
@@ -82,15 +97,12 @@ router.get("/device/health", async (req, res) => {
 
     testProcess.stdout.on("data", (data) => {
       stdout += data.toString();
-      console.log("Python stdout:", data.toString());
     });
 
     testProcess.stderr.on("data", (data) => {
       stderr += data.toString();
-      console.log("Python stderr:", data.toString());
     });
 
-    // Set longer timeout for response
     const responseTimeout = setTimeout(() => {
       if (!processCompleted) {
         processCompleted = true;
@@ -110,13 +122,8 @@ router.get("/device/health", async (req, res) => {
       clearTimeout(responseTimeout);
       processCompleted = true;
       
-      console.log(`Device health check exited with code: ${code}`);
-      console.log("Final stdout length:", stdout.length);
-      console.log("Final stderr length:", stderr.length);
-      
       if (code === 0 && stdout.trim()) {
         try {
-          // Try to parse JSON from stdout
           const result = JSON.parse(stdout.trim());
           res.json({
             success: result.success,
@@ -124,7 +131,6 @@ router.get("/device/health", async (req, res) => {
             message: result.message,
           });
         } catch (e) {
-          // If JSON parse fails, check if we got success message
           if (stdout.includes('"success": true') || stdout.includes('"success":true')) {
             res.json({
               success: true,
@@ -158,12 +164,15 @@ router.get("/device/health", async (req, res) => {
     });
 
     testProcess.on("error", (error) => {
-      res.status(500).json({
-        success: false,
-        connected: false,
-        message: "Failed to check device",
-        error: error.message,
-      });
+      if (!processCompleted) {
+        processCompleted = true;
+        res.status(500).json({
+          success: false,
+          connected: false,
+          message: "Failed to check device",
+          error: error.message,
+        });
+      }
     });
   } catch (error) {
     res.status(500).json({

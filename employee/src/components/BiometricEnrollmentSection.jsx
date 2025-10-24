@@ -27,7 +27,7 @@ const BiometricEnrollmentSection = ({ employeeId, onEnrollmentComplete }) => {
       const isConnected = await biometricService.checkBridgeHealth();
       setDeviceStatus(isConnected ? 'connected' : 'disconnected');
     } catch (error) {
-      console.error('Error checking device:', error);
+      // ✅ FIX: Silently fail device check (fingerprint is optional feature)
       setDeviceStatus('disconnected');
     }
   };
@@ -95,9 +95,10 @@ const BiometricEnrollmentSection = ({ employeeId, onEnrollmentComplete }) => {
         toast.error(data.message || 'Failed to enroll fingerprint');
       }
     } catch (error) {
-      console.error('Error enrolling fingerprint:', error);
+      // ✅ FIX: Better error handling without console spam
       toast.dismiss('fingerprint-scan');
-      toast.error('Error: ' + (error.response?.data?.message || error.message || 'Failed to connect to bridge server'));
+      const errorMsg = error.response?.data?.message || error.message || 'Failed to connect to bridge server';
+      toast.error('Error: ' + errorMsg);
     } finally {
       setEnrolling(false);
     }
@@ -117,12 +118,11 @@ const BiometricEnrollmentSection = ({ employeeId, onEnrollmentComplete }) => {
 
       if (data.success) {
         toast.success('Fingerprint deleted successfully');
-        await loadFingerprints();
       } else {
         toast.error(data.message || 'Failed to delete fingerprint');
       }
     } catch (error) {
-      console.error('Error deleting fingerprint:', error);
+      // ✅ FIX: Simplified error message
       toast.error('Error deleting fingerprint');
     }
   };

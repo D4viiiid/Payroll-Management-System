@@ -152,15 +152,20 @@ const Employees = () => {
 
   const checkFingerprintService = async () => {
     try {
-      // Check the NEW biometric-integrated service
+      // ✅ FIX: Check the biometric-integrated service (returns graceful error in production)
       const response = await fetch('/api/biometric-integrated/device/health', {
         method: 'GET',
       });
       const data = await response.json();
-      logger.log("Fingerprint service check response:", data);
+      
+      // Don't log errors in production
+      if (data.success && data.connected) {
+        logger.log("✅ Fingerprint service available");
+      }
+      
       return data.success && data.connected;
     } catch (error) {
-      logger.error("Fingerprint service error:", error);
+      // Silently fail - fingerprint service is optional
       return false;
     }
   };

@@ -428,7 +428,10 @@ router.get('/attendance/stats', async (req, res) => {
             fullDay,       // Completed full day (>= 6.5 hours)
             halfDay,       // Partial day (>= 4, < 6.5 hours)
             invalid,       // Invalid attendance (< 4 hours)
-            absent         // Did not time in today
+            absent,        // Did not time in today
+            _version: 'v1.0.4.2-FIXED', // 🚨 DEPLOYMENT VERIFICATION
+            _calculation: `absent = ${totalEmployees} - ${totalPresent} = ${absent}`,
+            _timestamp: new Date().toISOString()
         });
     } catch (error) {
         console.error('❌ Error fetching attendance stats:', error);

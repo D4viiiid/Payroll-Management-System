@@ -72,29 +72,31 @@ const FingerprintBridgeStatus = () => {
 
   /**
    * Download fingerprint bridge installer
-   * ✅ FIX: Use correct API URL format
+   * ✅ FIX: Download from static public file (works in production)
    */
   const handleDownload = async () => {
     try {
       setDownloading(true);
       toast.info('📦 Preparing download...');
 
-      // ✅ FIX: Remove '/api' from API_BASE since it's already included
-      const downloadUrl = API_BASE.replace('/api', '') + '/api/fingerprint-bridge/download';
-      console.log('Download URL:', downloadUrl);
+      // ✅ CRITICAL FIX: Download from static public file instead of API
+      // This works in production (Vercel) because public files are served as static assets
+      const downloadUrl = '/downloads/fingerprint-bridge-installer.zip';
+      console.log('📥 Download URL:', downloadUrl);
       
       const response = await fetch(downloadUrl);
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Download failed:', response.status, errorText);
-        throw new Error(`Download failed (${response.status})`);
+        console.error('❌ Download failed:', response.status, errorText);
+        throw new Error(`Download failed (HTTP ${response.status})`);
       }
 
       // Create blob from response
       const blob = await response.blob();
-      console.log('Downloaded blob size:', blob.size);
+      console.log('✅ Downloaded blob size:', blob.size, 'bytes');
       
+      // Validate blob size
       if (blob.size < 100) {
         throw new Error('Downloaded file is too small, may be corrupted');
       }
@@ -105,20 +107,27 @@ const FingerprintBridgeStatus = () => {
       a.href = url;
       a.download = 'fingerprint-bridge-installer.zip';
       document.body.appendChild(a);
+      
+      console.log('🎯 Triggering download...');
       a.click();
       
       // Cleanup
       setTimeout(() => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+        console.log('🧹 Cleaned up download resources');
       }, 100);
 
-      toast.success('✅ Download complete! Extract and run INSTALL_AUTO_SERVICE.bat as Administrator');
+      toast.success('✅ Download complete! Check your Downloads folder', {
+        autoClose: 5000
+      });
       setShowInstructions(true);
 
     } catch (error) {
-      console.error('Download error:', error);
-      toast.error('❌ Download failed: ' + error.message);
+      console.error('❌ Download error:', error);
+      toast.error(`❌ Download failed: ${error.message}`, {
+        autoClose: 10000
+      });
     } finally {
       setDownloading(false);
     }

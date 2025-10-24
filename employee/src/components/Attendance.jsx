@@ -330,6 +330,10 @@ const AttendancePage = () => {
     const manilaTimeMs = now.getTime() + (8 * 60 * 60 * 1000); // Add 8 hours
     const todayManila = new Date(manilaTimeMs).toISOString().split('T')[0]; // YYYY-MM-DD
     
+    // Create a proper ISO date string for today (Manila timezone)
+    // This is needed for date filtering to work correctly
+    const todayManilaISO = new Date(todayManila + 'T00:00:00.000Z').toISOString();
+    
     // Find employees who have NO attendance record for today
     const employeesWithAttendanceToday = new Set(
       transformed
@@ -353,7 +357,7 @@ const AttendancePage = () => {
         weekStart: getWeekStartDate(todayManila),
         rawTimeIn: null,
         rawTimeOut: null,
-        rawDate: null
+        rawDate: todayManilaISO // ✅ FIX: Use proper date string instead of null!
       }));
     
     // Combine actual attendance records with absent records

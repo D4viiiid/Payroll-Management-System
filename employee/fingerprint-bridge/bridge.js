@@ -86,33 +86,71 @@ const checkScripts = () => {
 
 /**
  * Check if ZKTeco device is connected via USB
+ * ✅ CRITICAL FIX: Use absolute Python path for Windows Service compatibility
  */
 const checkDeviceConnection = async () => {
   return new Promise((resolve) => {
+    // ✅ FIX: Try multiple Python paths (Windows Service compatibility)
+    const pythonPaths = [
+      'C:\\Python313\\python.exe',  // Direct installation path
+      'C:\\Python312\\python.exe',
+      'C:\\Python311\\python.exe',
+      'C:\\Python310\\python.exe',
+      'C:\\Python39\\python.exe',
+      'python'  // Fallback to PATH
+    ];
+    
+    let pythonPath = 'python';
+    
+    // Try to find Python executable
+    const fs = require('fs');
+    for (const path of pythonPaths) {
+      if (path === 'python' || fs.existsSync(path)) {
+        pythonPath = path;
+        break;
+      }
+    }
+    
+    console.log(`🐍 Using Python: ${pythonPath}`);
+    
     // Try to get device info from Python
-    const python = spawn('python', [
+    const python = spawn(pythonPath, [
       '-c',
-      'from pyzkfp import ZKFP2; zkfp2 = ZKFP2(); zkfp2.Init(); print(zkfp2.GetDeviceCount())'
+      'from pyzkfp import ZKFP2; zkfp2 = ZKFP2(); zkfp2.Init(); print(zkfp2.GetDeviceCount()); zkfp2.Terminate()'
     ]);
     
     let output = '';
+    let errorOutput = '';
+    
     python.stdout.on('data', (data) => {
       output += data.toString();
     });
     
+    python.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+    
     python.on('close', (code) => {
-      if (code === 0) {
+      if (code === 0 && output.trim()) {
         const deviceCount = parseInt(output.trim());
         deviceConnected = deviceCount > 0;
         lastDeviceCheck = new Date();
+        console.log(`✅ Device check: ${deviceCount} device(s) found`);
         resolve(deviceCount > 0);
       } else {
         deviceConnected = false;
+        if (errorOutput) {
+          console.error('❌ Python stderr:', errorOutput);
+        }
+        if (code !== 0) {
+          console.error(`❌ Python exit code: ${code}`);
+        }
         resolve(false);
       }
     });
     
-    python.on('error', () => {
+    python.on('error', (error) => {
+      console.error('❌ Python spawn error:', error.message);
       deviceConnected = false;
       resolve(false);
     });
@@ -528,11 +566,23 @@ if (hasSSL) {
     console.log('   4. Browser remembers - no warning on future visits');
     console.log('\n📦 To install as Windows Service:');
     console.log('   Run: INSTALL_AUTO_SERVICE.bat (as Administrator)');
-    console.log('\n🔌 USB Monitoring: ' + (usbDetection ? '✅ Active' : '⚠️  Disabled (install usb-detection)'));
+    console.log('🔌 USB Monitoring: ' + (usbDetection ? '✅ Active' : '⚠️  Disabled (install usb-detection)'));
     console.log('='.repeat(70) + '\n');
     
     // Initialize USB monitoring
     initUSBMonitoring();
+    
+    // ✅ CRITICAL FIX: Check device connection on startup
+    console.log('🔍 Checking for connected fingerprint devices...');
+    checkDeviceConnection().then(isConnected => {
+      if (isConnected) {
+        console.log('✅ ZKTeco fingerprint scanner detected and ready!');
+      } else {
+        console.log('⚠️  No fingerprint scanner detected. Please connect your ZKTeco device.');
+      }
+    }).catch(error => {
+      console.error('❌ Device check error:', error);
+    });
   });
   
 } else {
@@ -567,11 +617,23 @@ if (hasSSL) {
     console.log('   ⚡ Plug-and-play - just connect ZKTeco device');
     console.log('\n📦 To install as Windows Service:');
     console.log('   Run: INSTALL_AUTO_SERVICE.bat (as Administrator)');
-    console.log('\n🔌 USB Monitoring: ' + (usbDetection ? '✅ Active' : '⚠️  Disabled (install usb-detection)'));
+    console.log('🔌 USB Monitoring: ' + (usbDetection ? '✅ Active' : '⚠️  Disabled (install usb-detection)'));
     console.log('='.repeat(70) + '\n');
     
     // Initialize USB monitoring
     initUSBMonitoring();
+    
+    // ✅ CRITICAL FIX: Check device connection on startup
+    console.log('🔍 Checking for connected fingerprint devices...');
+    checkDeviceConnection().then(isConnected => {
+      if (isConnected) {
+        console.log('✅ ZKTeco fingerprint scanner detected and ready!');
+      } else {
+        console.log('⚠️  No fingerprint scanner detected. Please connect your ZKTeco device.');
+      }
+    }).catch(error => {
+      console.error('❌ Device check error:', error);
+    });
   });
 }
 

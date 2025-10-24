@@ -159,6 +159,32 @@ if %errorLevel% equ 0 (
 )
 
 echo.
+echo [SERVICE] Verifying service is running...
+timeout /t 3 /nobreak >nul
+sc query FingerprintBridgeService | find "RUNNING" >nul
+if %errorLevel% equ 0 (
+    echo ✅ FingerprintBridgeService is running
+) else (
+    echo ⚠️  Service might not be running
+    echo    Check: services.msc
+)
+
+echo.
+echo [FINAL CHECK] Testing API health endpoint...
+echo Waiting for service to initialize...
+timeout /t 5 /nobreak >nul
+curl -k https://localhost:3003/api/health 2>nul
+if %errorLevel% equ 0 (
+    echo.
+    echo ✅ Bridge API is responding!
+) else (
+    echo.
+    echo ⚠️  Bridge API not responding yet
+    echo    This is normal if service just started
+    echo    Wait 10 seconds and try: curl -k https://localhost:3003/api/health
+)
+
+echo.
 echo ========================================================================
 echo                    INSTALLATION COMPLETE!
 echo ========================================================================

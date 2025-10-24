@@ -65,10 +65,10 @@ const salaryRateSchema = new mongoose.Schema({
 });
 
 // ✅ CRITICAL PERFORMANCE FIX: Comprehensive indexes
-salaryRateSchema.index({ isActive: 1, effectiveDate: -1 }); // Primary active rate query
+salaryRateSchema.index({ isActive: 1, effectiveDate: -1 }); // Primary active rate query (covers isActive queries too)
 salaryRateSchema.index({ effectiveDate: -1 }); // Historical lookups
 salaryRateSchema.index({ createdBy: 1, effectiveDate: -1 }); // Audit trail queries
-salaryRateSchema.index({ isActive: 1 }); // Quick active check
+// REMOVED: salaryRateSchema.index({ isActive: 1 }); - Duplicate! Already covered by compound index above
 
 // ===== VIRTUAL FIELDS =====
 

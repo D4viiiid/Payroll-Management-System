@@ -612,9 +612,23 @@ router.post('/login', async (req, res) => {
     // ✅ FIX ISSUE #2: Check if admin requires PIN verification
     if (employee.isAdmin && employee.adminPin) {
       // Admin with PIN - require PIN verification
+      // ✅ CRITICAL FIX: Generate JWT token BEFORE requiring PIN
+      // Frontend needs this token after PIN verification completes
+      const token = jwt.sign(
+        { 
+          id: employee._id, 
+          employeeId: employee.employeeId,
+          username: employee.username,
+          isAdmin: employee.isAdmin || false
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '90d' }
+      );
+      
       return res.json({
         message: 'Password verified. PIN verification required.',
         requiresPin: true,
+        token, // ✅ CRITICAL FIX: Include token for post-PIN storage
         employee: {
           _id: employee._id,
           employeeId: employee.employeeId,

@@ -1,16 +1,39 @@
 /**
  * Windows Service Installer for Fingerprint Bridge
  * This creates a Windows service that runs automatically on boot
+ * 
+ * IMPORTANT: This script MUST be run from the fingerprint-bridge directory
+ * Example: cd C:\fingerprint-bridge && node install-service.js
  */
 
 const Service = require('node-windows').Service;
 const path = require('path');
+const fs = require('fs');
+
+// ✅ FIX: Use process.cwd() to get the current working directory
+// This ensures we get the directory where the user ran the script from
+const INSTALL_DIR = process.cwd();
+const BRIDGE_SCRIPT = path.join(INSTALL_DIR, 'bridge.js');
+
+// Verify bridge.js exists before installing service
+if (!fs.existsSync(BRIDGE_SCRIPT)) {
+  console.error('❌ ERROR: bridge.js not found in current directory!');
+  console.error('   Expected: ' + BRIDGE_SCRIPT);
+  console.error('   Current directory: ' + INSTALL_DIR);
+  console.error('\n💡 Please run this script from the fingerprint-bridge directory:');
+  console.error('   cd C:\\path\\to\\fingerprint-bridge');
+  console.error('   node install-service.js');
+  process.exit(1);
+}
+
+console.log('📂 Installation directory: ' + INSTALL_DIR);
+console.log('📄 Bridge script: ' + BRIDGE_SCRIPT);
 
 // Create a new service object
 const svc = new Service({
   name: 'FingerprintBridgeService',
   description: 'Fingerprint Bridge Server for ZKTeco device integration',
-  script: path.join(__dirname, 'bridge.js'),
+  script: BRIDGE_SCRIPT, // ✅ Use absolute path
   nodeOptions: [
     '--harmony',
     '--max_old_space_size=4096'
@@ -23,8 +46,14 @@ const svc = new Service({
     {
       name: "NODE_ENV",
       value: "production"
+    },
+    {
+      name: "BRIDGE_DIR",
+      value: INSTALL_DIR
     }
-  ]
+  ],
+  // ✅ Set working directory to installation directory
+  workingDirectory: INSTALL_DIR
 });
 
 // Listen for the "install" event

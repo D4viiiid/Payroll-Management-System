@@ -324,7 +324,40 @@ const AttendancePage = () => {
       };
     });
 
-    return transformed;
+    // ✅ CRITICAL FIX ISSUE #1: Generate absent records for employees with no attendance TODAY
+    // Get today's date in Manila timezone (same format as attendance records)
+    const now = new Date();
+    const manilaTimeMs = now.getTime() + (8 * 60 * 60 * 1000); // Add 8 hours
+    const todayManila = new Date(manilaTimeMs).toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    // Find employees who have NO attendance record for today
+    const employeesWithAttendanceToday = new Set(
+      transformed
+        .filter(record => record.date === todayManila && !record.archived)
+        .map(record => record.employeeId)
+    );
+    
+    // Generate absent records for missing employees
+    const absentRecords = employeeList
+      .filter(emp => !employeesWithAttendanceToday.has(emp.employeeId))
+      .map(emp => ({
+        id: `absent-${emp.employeeId}-${todayManila}`,
+        employeeId: emp.employeeId,
+        name: `${emp.firstName} ${emp.lastName}`,
+        date: todayManila,
+        status: 'Absent',
+        archived: false,
+        timeIn: '-',
+        timeOut: '-',
+        timeOutColor: '',
+        weekStart: getWeekStartDate(todayManila),
+        rawTimeIn: null,
+        rawTimeOut: null,
+        rawDate: null
+      }));
+    
+    // Combine actual attendance records with absent records
+    return [...transformed, ...absentRecords];
   };
 
   // Fetch attendance and employees data

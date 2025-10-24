@@ -159,7 +159,10 @@ const FingerprintBridgeStatus = () => {
     checkBridgeStatus();
     
     // Only auto-refresh in development environment
-    if (!IS_PRODUCTION) {
+    // Use Vite's built-in environment variable
+    const isDevelopment = import.meta.env.MODE === 'development';
+    
+    if (isDevelopment) {
       const interval = setInterval(() => {
         checkBridgeStatus();
       }, 10000); // Check every 10 seconds

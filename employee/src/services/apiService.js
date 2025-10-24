@@ -77,8 +77,13 @@ const fetchApi = async (url, options = {}) => {
     if (response.status === 401) {
       console.error('🔒 Authentication failed (401) - Session expired or invalid token');
       
-      // Clear all authentication data
-      localStorage.clear(); // Clear everything to be safe
+      // ✅ FIX v1.0.4: Only clear authentication-related data, not everything
+      // OLD: localStorage.clear() - TOO AGGRESSIVE, deleted ALL data
+      // NEW: Selective removal - only delete auth-related items
+      localStorage.removeItem('token');
+      localStorage.removeItem('currentEmployee');
+      localStorage.removeItem('userRole');
+      console.warn('🗑️ Cleared authentication data (token, currentEmployee, userRole)');
       
       // Show user-friendly error message
       toast.error('Session expired. Please login again.', {

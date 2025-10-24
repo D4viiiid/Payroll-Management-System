@@ -60,10 +60,20 @@ router.get('/current', async (req, res) => {
 // ✅ CRITICAL FIX ISSUE #2: Remove authentication requirement from history endpoint
 // Rate history is read-only information useful for context when viewing salary data
 // Only CREATION of new rates requires authentication
+// 🚨 DEPLOYMENT VERIFICATION v1.0.4 - This endpoint MUST be publicly accessible
 router.get('/history', async (req, res) => {
   try {
+    console.log('\n' + '🔥'.repeat(50));
+    console.log('🔥 SALARY RATE HISTORY v1.0.4 - PUBLIC ACCESS (NO AUTH)');
+    console.log('🔥 This endpoint MUST NOT require authentication!');
+    console.log('🔥'.repeat(50));
+    
     const limit = parseInt(req.query.limit) || 10;
     const history = await SalaryRate.getRateHistory(limit);
+    
+    console.log(`✅ Rate history fetched: ${history.length} records`);
+    console.log(`✅ No authentication required - public access confirmed`);
+    console.log('🔥'.repeat(50) + '\n');
     
     res.json({
       success: true,

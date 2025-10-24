@@ -56,6 +56,8 @@ import reportsRouter from './routes/reports.js';
 import archiveRouter from './routes/archive.js';
 // 💰 Salary Rate Management Routes
 import salaryRateRouter from './routes/salaryRate.js';
+// 🔐 Fingerprint Bridge Installer Routes
+import fingerprintBridgeRouter from './routes/fingerprintBridge.js';
 // 🤖 Phase 2 Enhancement: Automated Jobs
 import { 
   scheduleWeeklyPayroll, 
@@ -199,6 +201,8 @@ app.use('/api/reports', reportsRouter);
 // 💰 Salary Rate Management Routes
 app.use('/api/salary-rate', salaryRateRouter);
 app.use('/api/archive', archiveRouter);
+// 🔐 Fingerprint Bridge Installer Routes
+app.use('/api/fingerprint-bridge', fingerprintBridgeRouter);
 
 
 console.log('All routes loaded ✅');

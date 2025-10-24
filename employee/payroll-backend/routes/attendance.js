@@ -405,15 +405,23 @@ router.get('/attendance/stats', async (req, res) => {
 
         const endTime = Date.now();
         const totalTime = endTime - startTime;
+        
+        // 🚨 DEPLOYMENT VERIFICATION v1.0.4 - Stats calculation fix
+        console.log('\n' + '🔥'.repeat(50));
+        console.log('🔥 STATS CALCULATION v1.0.4 - CRITICAL FIX DEPLOYED');
+        console.log('🔥'.repeat(50));
         console.log(`📊 FINAL STATS:`);
         console.log(`   Total Present (all who timed in): ${totalPresent}`);
         console.log(`   Full Day (completed >= 6.5hrs): ${fullDay}`);
         console.log(`   Half Day (completed 4-6.5hrs): ${halfDay}`);
         console.log(`   Invalid (<4 hrs): ${invalid}`);
-        console.log(`   Absent (no time in): ${absent}`);
+        console.log(`   ✅ Absent (no time in): ${absent} (MUST = totalEmployees if no attendance)`);
         console.log(`   Total Employees: ${totalEmployees}`);
         console.log(`⚡ Total processing time: ${totalTime}ms`);
-        console.log('📊 ========================================\n');
+        console.log('🔥 Calculation: absent = totalEmployees - totalPresent');
+        console.log('🔥 Expected: absent=' + totalEmployees + ' (if totalPresent=0)');
+        console.log('🔥 Actual: absent=' + absent);
+        console.log('🔥'.repeat(50) + '\n');
 
         res.json({
             totalPresent,  // All who timed in today (with or without time out)

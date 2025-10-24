@@ -53,19 +53,55 @@ echo ✅ Python found
 
 echo.
 echo [2/6] Installing Python dependencies (pyzkfp, pymongo)...
-if exist requirements.txt (
-    pip install -r requirements.txt
+echo.
+echo Installing critical packages with specific versions...
+echo   - pyzkfp==0.1.5     (ZKTeco fingerprint SDK)
+echo   - pymongo           (MongoDB connection)
+echo   - python-dotenv     (Environment variables)
+echo   - pillow            (Image processing)
+echo   - requests          (HTTP client)
+echo   - dnspython         (DNS resolution)
+echo.
+
+REM Install with specific versions to ensure compatibility
+pip install pyzkfp==0.1.5 pymongo python-dotenv pillow requests dnspython --quiet
+if %errorLevel% neq 0 (
+    echo.
+    echo ⚠️  WARNING: Some packages failed with specific versions
+    echo Trying without version constraints...
+    pip install pyzkfp pymongo python-dotenv pillow requests dnspython
     if %errorLevel% neq 0 (
         echo.
-        echo WARNING: Some Python packages failed to install
-        echo Trying individual packages...
-        pip install pyzkfp pymongo python-dotenv
+        echo ❌ ERROR: Failed to install Python dependencies!
+        echo.
+        echo TROUBLESHOOTING:
+        echo   1. Ensure Python is properly installed
+        echo   2. Try upgrading pip: python -m pip install --upgrade pip
+        echo   3. Install Visual C++ Build Tools if needed:
+        echo      https://visualstudio.microsoft.com/visual-cpp-build-tools/
+        echo.
+        pause
+        exit /b 1
     )
-) else (
-    echo requirements.txt not found, installing packages manually...
-    pip install pyzkfp pymongo python-dotenv
 )
-echo ✅ Python dependencies installed
+
+echo.
+echo Verifying Python packages installation...
+python -c "import pyzkfp; print('✅ pyzkfp imported successfully')" 2>nul
+if %errorLevel% neq 0 (
+    echo ❌ pyzkfp import failed! Installation incomplete.
+    pause
+    exit /b 1
+)
+
+python -c "import pymongo; print('✅ pymongo imported successfully')" 2>nul
+if %errorLevel% neq 0 (
+    echo ❌ pymongo import failed! Installation incomplete.
+    pause
+    exit /b 1
+)
+
+echo ✅ All Python dependencies installed and verified
 
 echo.
 echo [3/6] Checking Node.js installation...
@@ -109,6 +145,18 @@ echo.
 echo [FINAL] Starting service...
 timeout /t 3 /nobreak >nul
 net start FingerprintBridgeService
+
+echo.
+echo [POST-INSTALL] Testing device detection...
+echo.
+python -c "from pyzkfp import ZKFP2; zkfp2 = ZKFP2(); zkfp2.Init(); count = zkfp2.GetDeviceCount(); print(f'📱 Detected {count} ZKTeco device(s)'); zkfp2.Terminate()" 2>nul
+if %errorLevel% equ 0 (
+    echo ✅ Device detection test PASSED!
+) else (
+    echo ⚠️  Device detection test failed
+    echo    This is OK if scanner is not connected yet
+    echo    Please connect scanner and restart service
+)
 
 echo.
 echo ========================================================================

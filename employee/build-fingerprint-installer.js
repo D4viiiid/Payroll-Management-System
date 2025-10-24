@@ -114,10 +114,14 @@ pythonScriptsToInclude.forEach(file => {
 // Add requirements.txt for Python dependencies
 const requirementsTxt = `# Python Dependencies for Fingerprint Bridge
 # Install with: pip install -r requirements.txt
+# ✅ CRITICAL: Using exact versions that are known to work
 
-pyzkfp>=1.0.0
+pyzkfp==0.1.5
 pymongo>=4.5.0
 python-dotenv>=1.0.0
+pillow>=10.0.0
+requests>=2.28.0
+dnspython>=2.3.0
 `;
 archive.append(requirementsTxt, { name: 'fingerprint-bridge/requirements.txt' });
 console.log('   ✓ requirements.txt (Python dependencies)');

@@ -93,7 +93,14 @@ export const getCurrentSalaryRate = async () => {
 export const getSalaryRateHistory = async (limit = 10) => {
   try {
     // ✅ CRITICAL FIX: Validate token before API call
-    const token = validateToken();
+    let token;
+    try {
+      token = validateToken();
+    } catch (tokenError) {
+      // Don't redirect immediately - let the calling component handle it
+      console.error('❌ Token validation failed in getSalaryRateHistory:', tokenError.message);
+      throw tokenError; // Re-throw to be caught by outer catch
+    }
     
     const response = await axios.get(`${API_URL}/salary-rate/history`, {
       params: { limit },
@@ -105,13 +112,10 @@ export const getSalaryRateHistory = async (limit = 10) => {
   } catch (error) {
     console.error('❌ Error fetching salary rate history:', error);
     
-    // ✅ Handle token validation errors - redirect to home page (login)
+    // ✅ IMPORTANT: Don't auto-redirect here - let the component decide
+    // Just re-throw the error with clear message
     if (error.message?.includes('NO_TOKEN') || error.message?.includes('INVALID_TOKEN') || error.message?.includes('TOKEN_EXPIRED')) {
-      // Clear all auth data
-      localStorage.clear();
-      // Redirect to home page (which shows login)
-      window.location.href = '/?session=expired';
-      throw new Error('Session expired. Redirecting to login...');
+      throw error; // Re-throw token error without redirecting
     }
     
     throw error;

@@ -67,17 +67,27 @@ const Dashboard_2 = () => {
       
       console.log('📊 Dashboard: Fetching attendance stats...');
       const data = await attendanceApi.getStats();
-      console.log('📊 Dashboard: Stats received:', data);
+      console.log('📊 Dashboard: Raw response from API:', JSON.stringify(data, null, 2));
+      console.log('📊 Dashboard: Data type:', typeof data);
+      console.log('📊 Dashboard: Data keys:', Object.keys(data));
       
       if (!data.error) {
-        console.log('📊 Dashboard: Setting stats state:', {
-          totalPresent: data.totalPresent,
-          fullDay: data.fullDay,
-          halfDay: data.halfDay,
-          absent: data.absent,
-          invalid: data.invalid
-        });
-        setAttendanceStats(data);
+        // ✅ CRITICAL FIX: Ensure we're using the correct field names from backend
+        const statsToSet = {
+          totalPresent: Number(data.totalPresent || 0),
+          fullDay: Number(data.fullDay || 0),
+          halfDay: Number(data.halfDay || 0),
+          absent: Number(data.absent || 0),
+          invalid: Number(data.invalid || 0)
+        };
+        
+        console.log('📊 Dashboard: Formatted stats to set:', statsToSet);
+        setAttendanceStats(statsToSet);
+        
+        // ✅ VERIFICATION: Log what's in state after setting
+        setTimeout(() => {
+          console.log('📊 Dashboard: Stats in state after update (verify)');
+        }, 100);
       } else {
         console.error('❌ Dashboard: Error in stats response:', data.error);
         setErrorAttendance(data.error);

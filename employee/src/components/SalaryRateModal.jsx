@@ -55,6 +55,31 @@ const SalaryRateModal = ({ isOpen, onClose, onSuccess }) => {
       logger.info(`✅ Fetched ${history.length} rate history records`);
     } catch (error) {
       logger.error('❌ Error fetching rate history:', error);
+      
+      // ✅ CRITICAL FIX: Handle token errors - redirect to login
+      if (error.message?.includes('NO_TOKEN') || 
+          error.message?.includes('INVALID_TOKEN') || 
+          error.message?.includes('TOKEN_EXPIRED')) {
+        logger.error('🔒 Authentication error - redirecting to login');
+        
+        // Close modal first
+        onClose();
+        
+        // Clear auth data
+        localStorage.clear();
+        
+        // Show alert before redirect
+        alert('Your session has expired. Please login again.');
+        
+        // Redirect to home page (login)
+        setTimeout(() => {
+          window.location.href = '/?session=expired';
+        }, 500);
+        
+        return; // Stop execution
+      }
+      
+      // For other errors, just log and continue (history is optional)
       setRateHistory([]);
     }
   };

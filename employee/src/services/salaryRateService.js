@@ -92,33 +92,28 @@ export const getCurrentSalaryRate = async () => {
 // Get salary rate history (admin only)
 export const getSalaryRateHistory = async (limit = 10) => {
   try {
-    // ✅ CRITICAL FIX: Validate token before API call
-    let token;
-    try {
-      token = validateToken();
-    } catch (tokenError) {
-      // Don't redirect immediately - let the calling component handle it
-      console.error('❌ Token validation failed in getSalaryRateHistory:', tokenError.message);
-      throw tokenError; // Re-throw to be caught by outer catch
+    // ✅ CRITICAL FIX: Make rate history available without auth
+    // History is read-only and useful for context when creating new rates
+    // Only creation requires authentication
+    const token = localStorage.getItem('token');
+    
+    const headers = {};
+    // Only add Authorization header if token exists (optional)
+    if (token && token !== 'null' && token !== 'undefined') {
+      headers['Authorization'] = `Bearer ${token}`;
     }
     
     const response = await axios.get(`${API_URL}/salary-rate/history`, {
       params: { limit },
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      headers
     });
     return response.data.history;
   } catch (error) {
     console.error('❌ Error fetching salary rate history:', error);
     
-    // ✅ IMPORTANT: Don't auto-redirect here - let the component decide
-    // Just re-throw the error with clear message
-    if (error.message?.includes('NO_TOKEN') || error.message?.includes('INVALID_TOKEN') || error.message?.includes('TOKEN_EXPIRED')) {
-      throw error; // Re-throw token error without redirecting
-    }
-    
-    throw error;
+    // ✅ Don't throw - just return empty array
+    // Rate history is optional for modal functionality
+    return [];
   }
 };
 

@@ -56,31 +56,13 @@ const SalaryRateModal = ({ isOpen, onClose, onSuccess }) => {
     } catch (error) {
       logger.error('❌ Error fetching rate history:', error);
       
-      // ✅ CRITICAL FIX: Handle token errors - redirect to login
-      if (error.message?.includes('NO_TOKEN') || 
-          error.message?.includes('INVALID_TOKEN') || 
-          error.message?.includes('TOKEN_EXPIRED')) {
-        logger.error('🔒 Authentication error - redirecting to login');
-        
-        // Close modal first
-        onClose();
-        
-        // Clear auth data
-        localStorage.clear();
-        
-        // Show alert before redirect
-        alert('Your session has expired. Please login again.');
-        
-        // Redirect to home page (login)
-        setTimeout(() => {
-          window.location.href = '/?session=expired';
-        }, 500);
-        
-        return; // Stop execution
-      }
-      
-      // For other errors, just log and continue (history is optional)
+      // ✅ CRITICAL FIX: Rate history is OPTIONAL - don't block modal opening
+      // Just set empty history and continue
+      // Modal can still be used to create new salary rates even without history
       setRateHistory([]);
+      
+      logger.warn('⚠️ Rate history unavailable, but modal will remain functional');
+      // Don't show alert or redirect - history is not essential for modal functionality
     }
   };
 

@@ -313,9 +313,10 @@ export const attendanceApi = {
   getStats: async (filters = {}) => {
     const queryParams = new URLSearchParams(filters).toString();
     const url = `${BACKEND_API_URL}/attendance/stats${queryParams ? `?${queryParams}` : ''}`;
-    const cacheKey = createCacheKey(url, filters);
-    const fetchFn = async () => await fetchApi(url);
-    return await requestDeduplicator.dedupe(cacheKey, fetchFn, 5000);
+    // ✅ CRITICAL FIX: Disable caching for stats - they need to be real-time
+    // Stats can change frequently (new attendance, updated records)
+    // Always fetch fresh data from server
+    return await fetchApi(url);
   },
   
   // Get attendance by employee ID

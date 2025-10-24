@@ -125,12 +125,20 @@ export const getSalaryRateForDate = async (date) => {
 // Create new salary rate (admin only)
 export const createSalaryRate = async (rateData) => {
   try {
-    // ✅ CRITICAL FIX: Validate token BEFORE making request
-    const token = validateToken(); // Will throw if token is missing/invalid/expired
+    // ✅ SIMPLIFIED FIX: Just get token from localStorage, let backend validate it
+    const token = localStorage.getItem('token');
     
-    console.log('🔐 Salary Rate Service - Token Validated Successfully');
+    // Basic check: token exists
+    if (!token || token === 'null' || token === 'undefined') {
+      console.error('❌ NO TOKEN: User is not logged in');
+      throw new Error('You are not logged in. Please login again.');
+    }
+    
+    console.log('🔐 Salary Rate Service - Sending create request');
     console.log('  - API URL:', `${API_URL}/salary-rate`);
     console.log('  - Rate Data:', rateData);
+    console.log('  - Token exists:', !!token);
+    console.log('  - Token length:', token.length);
     
     const response = await axios.post(`${API_URL}/salary-rate`, rateData, {
       headers: {
@@ -147,28 +155,10 @@ export const createSalaryRate = async (rateData) => {
     console.error('  - Response data:', error.response?.data);
     console.error('  - Response status:', error.response?.status);
     
-    // ✅ CRITICAL FIX: Handle token validation errors - redirect to home page (login)
-    if (error.message === 'NO_TOKEN' || error.message?.includes('NO_TOKEN')) {
-      localStorage.clear();
-      window.location.href = '/?reason=no_token';
-      throw new Error('You are not logged in. Redirecting to login...');
-    }
-    
-    if (error.message === 'TOKEN_EXPIRED' || error.message?.includes('TOKEN_EXPIRED')) {
-      localStorage.clear();
-      window.location.href = '/?reason=session_expired';
-      throw new Error('Your session has expired. Redirecting to login...');
-    }
-    
-    if (error.message === 'INVALID_TOKEN' || error.message?.includes('INVALID_TOKEN')) {
-      localStorage.clear();
-      window.location.href = '/?reason=invalid_token';
-      throw new Error('Invalid authentication token. Redirecting to login...');
-    }
-    
-    // ✅ Provide user-friendly error messages for API errors
+    // ✅ Handle backend authentication errors (let backend do the validation)
     if (error.response?.status === 401) {
-      throw new Error('Authentication failed. Your session may have expired. Please login again.');
+      const backendMessage = error.response?.data?.message || 'Authentication failed';
+      throw new Error(`Authentication error: ${backendMessage}`);
     } else if (error.response?.status === 403) {
       throw new Error('Access denied. Admin privileges required.');
     } else {

@@ -352,47 +352,40 @@ router.get('/attendance/stats', async (req, res) => {
             totalEmployees = localEmployeeStorage.count();
         }
 
-        // ✅ FIX ISSUE 2: Accurate statistics calculation
-        // Count employees based on attendance status and ACTUAL WORK HOURS
-        // Present: Has timeIn but NO timeOut yet (currently working)
-        // Full Day: Worked >= 6.5 hours (excluding 1-hour lunch break)
-        // Half Day: Worked >= 4 hours but < 6.5 hours
-        // Invalid: Worked < 4 hours (no pay eligibility)
-        // Absent: Did not show up today
+        // ✅ CRITICAL FIX ISSUE #1: Redefine statistics calculation based on user requirements
+        // User Requirements from screenshots and description:
+        // - Total Present: ALL employees who timed in today (with OR without time out)
+        // - Full Day: Timed in AND timed out AND worked >= 6.5 hours (including OT)
+        // - Half Day: Timed in AND timed out AND worked 4 to <6.5 hours
+        // - Invalid: Timed in AND timed out AND worked < 4 hours
+        // - Absent: Did NOT time in today (totalEmployees - totalPresent)
         
-        let present = 0;       // Currently working (has timeIn, no timeOut)
-        let fullDay = 0;       // Completed full day (>= 6.5 hours)
-        let halfDay = 0;       // Partial day (>= 4 hours, < 6.5 hours)
-        let invalid = 0;       // Invalid attendance (< 4 hours worked)
-        let totalAttended = 0; // Total who showed up today
+        let totalPresent = 0;  // All who timed in today (with or without time out)
+        let fullDay = 0;       // Completed full day (timed out, >= 6.5 hours)
+        let halfDay = 0;       // Partial day (timed out, >= 4 hours, < 6.5 hours)
+        let invalid = 0;       // Invalid attendance (timed out, < 4 hours worked)
 
         todayRecords.forEach(record => {
             if (record.timeIn) {
-                totalAttended++;
+                // ✅ FIX: Count as present if they have time in (regardless of time out)
+                totalPresent++;
                 
                 if (record.timeOut) {
-                    // ✅ FIX: Use status from database
-                    // Status rules:
-                    // - 'present': Only for employees who clocked in but haven't clocked out yet
-                    // - 'invalid': <4 hours worked (no pay)
-                    // - 'half-day': 4 to <6.5 hours worked (variable pay)
-                    // - 'full-day': 6.5-8 hours worked (100% daily rate)
-                    // - 'overtime': >6.5 hours + timed out after 5PM (full pay + OT)
+                    // Employee has both time in and time out - calculate their day type
                     const status = record.status || 'present';
                     
+                    // Use the status that was calculated during time out
                     if (status === 'invalid') {
                         invalid++;
-                    } else if (status === 'half-day') {
+                    } else if (status === 'half-day' || status === 'late') {
                         halfDay++;
                     } else if (status === 'full-day') {
-                        // Full day: 6.5-8 hours worked
                         fullDay++;
                     } else if (status === 'overtime') {
-                        // Overtime also counts as full day worked
+                        // Overtime counts as full day completed
                         fullDay++;
                     } else if (status === 'present') {
-                        // Legacy records: 'present' with timeOut means full day
-                        // Fallback calculation for old data
+                        // Legacy fallback: Calculate manually
                         const hoursWorked = calculateWorkHours(record.timeIn, record.timeOut);
                         if (hoursWorked >= 6.5) {
                             fullDay++;
@@ -402,34 +395,32 @@ router.get('/attendance/stats', async (req, res) => {
                             invalid++;
                         }
                     }
-                } else {
-                    // Employee has time in but no time out = Currently Present
-                    present++;
                 }
+                // ✅ NOTE: If employee has timeIn but NO timeOut, they count in totalPresent
+                // but NOT in fullDay, halfDay, or invalid (shift incomplete)
             }
         });
 
-        const absent = totalEmployees - totalAttended;
+        const absent = totalEmployees - totalPresent;
 
         const endTime = Date.now();
         const totalTime = endTime - startTime;
         console.log(`📊 FINAL STATS:`);
-        console.log(`   Present (working now): ${present}`);
-        console.log(`   Full Day (completed): ${fullDay}`);
-        console.log(`   Half Day: ${halfDay}`);
+        console.log(`   Total Present (all who timed in): ${totalPresent}`);
+        console.log(`   Full Day (completed >= 6.5hrs): ${fullDay}`);
+        console.log(`   Half Day (completed 4-6.5hrs): ${halfDay}`);
         console.log(`   Invalid (<4 hrs): ${invalid}`);
-        console.log(`   Absent: ${absent}`);
+        console.log(`   Absent (no time in): ${absent}`);
         console.log(`   Total Employees: ${totalEmployees}`);
-        console.log(`   Total Attended: ${totalAttended}`);
         console.log(`⚡ Total processing time: ${totalTime}ms`);
         console.log('📊 ========================================\n');
 
         res.json({
-            totalPresent: present,  // Currently working (no timeOut)
-            fullDay,
-            halfDay,
-            invalid,  // ✅ NEW: Include invalid count
-            absent
+            totalPresent,  // All who timed in today (with or without time out)
+            fullDay,       // Completed full day (>= 6.5 hours)
+            halfDay,       // Partial day (>= 4, < 6.5 hours)
+            invalid,       // Invalid attendance (< 4 hours)
+            absent         // Did not time in today
         });
     } catch (error) {
         console.error('❌ Error fetching attendance stats:', error);

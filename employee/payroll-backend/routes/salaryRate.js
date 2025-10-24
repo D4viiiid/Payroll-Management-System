@@ -56,8 +56,11 @@ router.get('/current', async (req, res) => {
   }
 });
 
-// GET rate history (admin only)
-router.get('/history', auth, adminAuth, async (req, res) => {
+// GET rate history (public - no auth required for read-only access)
+// ✅ CRITICAL FIX ISSUE #2: Remove authentication requirement from history endpoint
+// Rate history is read-only information useful for context when viewing salary data
+// Only CREATION of new rates requires authentication
+router.get('/history', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     const history = await SalaryRate.getRateHistory(limit);

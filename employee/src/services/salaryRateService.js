@@ -89,30 +89,18 @@ export const getCurrentSalaryRate = async () => {
   }
 };
 
-// Get salary rate history (admin only)
+// Get salary rate history (now public - no auth required)
 export const getSalaryRateHistory = async (limit = 10) => {
   try {
-    // ✅ CRITICAL FIX: Make rate history available without auth
-    // History is read-only and useful for context when creating new rates
-    // Only creation requires authentication
-    const token = localStorage.getItem('token');
-    
-    const headers = {};
-    // Only add Authorization header if token exists (optional)
-    if (token && token !== 'null' && token !== 'undefined') {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    
+    // ✅ CRITICAL FIX ISSUE #2: Backend now allows public access to rate history
+    // No authentication required for read-only history viewing
     const response = await axios.get(`${API_URL}/salary-rate/history`, {
-      params: { limit },
-      headers
+      params: { limit }
     });
     return response.data.history;
   } catch (error) {
     console.error('❌ Error fetching salary rate history:', error);
-    
-    // ✅ Don't throw - just return empty array
-    // Rate history is optional for modal functionality
+    // Return empty array as graceful fallback
     return [];
   }
 };

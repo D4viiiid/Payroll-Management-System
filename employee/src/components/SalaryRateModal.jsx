@@ -55,14 +55,8 @@ const SalaryRateModal = ({ isOpen, onClose, onSuccess }) => {
       logger.info(`✅ Fetched ${history.length} rate history records`);
     } catch (error) {
       logger.error('❌ Error fetching rate history:', error);
-      
-      // ✅ CRITICAL FIX: Rate history is OPTIONAL - don't block modal opening
-      // Just set empty history and continue
-      // Modal can still be used to create new salary rates even without history
+      // Set empty history as fallback
       setRateHistory([]);
-      
-      logger.warn('⚠️ Rate history unavailable, but modal will remain functional');
-      // Don't show alert or redirect - history is not essential for modal functionality
     }
   };
 

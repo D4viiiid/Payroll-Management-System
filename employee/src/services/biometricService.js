@@ -1,9 +1,12 @@
 // employee/src/services/biometricService.js
-// Updated to use Fingerprint Bridge Server (localhost:3002)
+// Updated to use Fingerprint Bridge Server with HTTPS support
 import axios from 'axios';
 
-// Local bridge server (runs on client machine with USB fingerprint scanner)
-const BRIDGE_URL = 'http://localhost:3003/api';
+// Local bridge server URLs (tries HTTPS first, falls back to HTTP)
+const BRIDGE_URLS = {
+  https: 'https://localhost:3003/api',
+  http: 'http://localhost:3003/api'
+};
 
 class BiometricService {
   constructor() {
@@ -13,18 +16,62 @@ class BiometricService {
       deviceConnected: false,
       lastCheck: null
     };
+    this.activeBridgeUrl = null; // Will be set after detecting which URL works
+  }
+
+  /**
+   * Find which bridge URL works (HTTPS or HTTP)
+   * @returns {Promise<string|null>} - Working bridge URL or null
+   */
+  async findWorkingBridgeUrl() {
+    // If already found, return cached URL
+    if (this.activeBridgeUrl) {
+      return this.activeBridgeUrl;
+    }
+
+    // Try HTTPS first (required for Vercel production)
+    for (const protocol of ['https', 'http']) {
+      const url = BRIDGE_URLS[protocol];
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+
+        const response = await fetch(`${url}/health`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          console.log(`✅ Bridge found: ${url}`);
+          this.activeBridgeUrl = url;
+          return url;
+        }
+      } catch (error) {
+        console.log(`❌ Bridge not available at ${url}`);
+      }
+    }
+
+    console.log('❌ No working bridge URL found');
+    return null;
   }
 
   /**
    * Check if fingerprint bridge server is running
    * @returns {Promise<boolean>} - True if server is running
-   * ✅ FIX: Suppress errors in production environment
    */
   async checkBridgeHealth() {
     const isProduction = import.meta.env.VITE_APP_ENV === 'production';
     
     try {
-      const response = await fetch(`${BRIDGE_URL}/health`, {
+      const bridgeUrl = await this.findWorkingBridgeUrl();
+      if (!bridgeUrl) {
+        throw new Error('Bridge server not available');
+      }
+
+      const response = await fetch(`${bridgeUrl}/health`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -51,13 +98,17 @@ class BiometricService {
   /**
    * Get detailed device status
    * @returns {Promise<Object>} - Device status object
-   * ✅ FIX: Suppress errors in production environment
    */
   async getDeviceStatus() {
     const isProduction = import.meta.env.VITE_APP_ENV === 'production';
     
     try {
-      const response = await fetch(`${BRIDGE_URL}/device/status`);
+      const bridgeUrl = await this.findWorkingBridgeUrl();
+      if (!bridgeUrl) {
+        throw new Error('Bridge server not available');
+      }
+
+      const response = await fetch(`${bridgeUrl}/device/status`);
       const data = await response.json();
       
       this.deviceStatus.serverRunning = true;
@@ -85,23 +136,10 @@ class BiometricService {
   /**
    * Start auto health checking (polls every 5 seconds)
    * @param {Function} callback - Called when status changes
-   * ✅ FIX: Disable auto health checks in production (bridge server is local-only)
    */
   startAutoHealthCheck(callback) {
-    // ✅ CRITICAL FIX: Skip auto health checks in production environment
-    // Bridge server runs locally (localhost:3003) for USB fingerprint device
-    // Cannot run in cloud deployment, so disable automatic polling in production
-    const isProduction = import.meta.env.VITE_APP_ENV === 'production';
-    
-    if (isProduction) {
-      console.log('🔇 Bridge health checks disabled in production (fingerprint bridge is local-only)');
-      // Set status to indicate bridge is not available in production
-      this.deviceStatus.serverRunning = false;
-      this.deviceStatus.deviceConnected = false;
-      this.deviceStatus.lastCheck = new Date();
-      if (callback) callback(false);
-      return; // Exit early - no polling in production
-    }
+    // ✅ Bridge health checks work in production now (uses HTTPS)
+    console.log('🔍 Starting bridge health checks (HTTPS supported)...');
     
     if (this.healthCheckInterval) {
       this.stopAutoHealthCheck();
@@ -139,7 +177,12 @@ class BiometricService {
    */
   async enrollEmployee(employeeData) {
     try {
-      const response = await axios.post(`${BRIDGE_URL}/fingerprint/enroll`, {
+      const bridgeUrl = await this.findWorkingBridgeUrl();
+      if (!bridgeUrl) {
+        throw new Error('Bridge server not available. Please install and start the Fingerprint Bridge Service.');
+      }
+
+      const response = await axios.post(`${bridgeUrl}/fingerprint/enroll`, {
         employeeId: employeeData._id,
         firstName: employeeData.firstName,
         lastName: employeeData.lastName,
@@ -157,7 +200,12 @@ class BiometricService {
    */
   async loginWithFingerprint() {
     try {
-      const response = await axios.post(`${BRIDGE_URL}/fingerprint/login`);
+      const bridgeUrl = await this.findWorkingBridgeUrl();
+      if (!bridgeUrl) {
+        throw new Error('Bridge server not available. Please install and start the Fingerprint Bridge Service.');
+      }
+
+      const response = await axios.post(`${bridgeUrl}/fingerprint/login`);
       return response.data;
     } catch (error) {
       console.error('❌ Fingerprint login failed:', error);
@@ -170,7 +218,12 @@ class BiometricService {
    */
   async captureFingerprint() {
     try {
-      const response = await axios.post(`${BRIDGE_URL}/fingerprint/capture`);
+      const bridgeUrl = await this.findWorkingBridgeUrl();
+      if (!bridgeUrl) {
+        throw new Error('Bridge server not available. Please install and start the Fingerprint Bridge Service.');
+      }
+
+      const response = await axios.post(`${bridgeUrl}/fingerprint/capture`);
       return response.data;
     } catch (error) {
       console.error('❌ Fingerprint capture failed:', error);
@@ -183,7 +236,12 @@ class BiometricService {
    */
   async recordAttendance() {
     try {
-      const response = await axios.post(`${BRIDGE_URL}/attendance/record`);
+      const bridgeUrl = await this.findWorkingBridgeUrl();
+      if (!bridgeUrl) {
+        throw new Error('Bridge server not available. Please install and start the Fingerprint Bridge Service.');
+      }
+
+      const response = await axios.post(`${bridgeUrl}/attendance/record`);
       return response.data;
     } catch (error) {
       console.error('❌ Attendance recording failed:', error);

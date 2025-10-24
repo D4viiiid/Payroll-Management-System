@@ -10,7 +10,7 @@ import { toast } from 'react-toastify';
  * 3. Real-time status updates
  * 4. Installation instructions
  * 
- * ✅ FIX: Disabled localhost:3003 polling in production to prevent console errors
+ * ✅ NEW: HTTPS support - works from Vercel production!
  */
 const FingerprintBridgeStatus = () => {
   const [bridgeConnected, setBridgeConnected] = useState(false);
@@ -19,52 +19,73 @@ const FingerprintBridgeStatus = () => {
   const [lastCheck, setLastCheck] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [bridgeProtocol, setBridgeProtocol] = useState(null); // 'https' or 'http'
 
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-  const BRIDGE_URL = 'http://localhost:3003';
-  const IS_PRODUCTION = import.meta.env.VITE_APP_ENV === 'production';
+  const BRIDGE_URLS = {
+    https: 'https://localhost:3003',
+    http: 'http://localhost:3003'
+  };
+
+  /**
+   * Find which bridge URL works (HTTPS or HTTP)
+   */
+  const findWorkingBridgeUrl = async () => {
+    // Try HTTPS first (required for Vercel production)
+    for (const protocol of ['https', 'http']) {
+      const url = BRIDGE_URLS[protocol];
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+        const response = await fetch(`${url}/api/health`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          return { url, protocol };
+        }
+      } catch (error) {
+        // Try next protocol
+      }
+    }
+    return null;
+  };
 
   /**
    * Check if local fingerprint bridge is running
-   * ✅ FIX: Skip health checks in production (bridge is local-only)
+   * ✅ NEW: Works in production with HTTPS bridge
    */
   const checkBridgeStatus = async () => {
     try {
       setChecking(true);
       
-      // ✅ CRITICAL FIX: Don't try to connect to localhost:3003 in production
-      // The fingerprint bridge runs locally on the user's computer, not on Vercel
-      if (IS_PRODUCTION) {
-        // In production, bridge status can only be determined if user has it installed
-        setBridgeConnected(false);
-        setDeviceConnected(false);
-        setLastCheck(new Date());
-        setChecking(false);
-        return;
-      }
+      const result = await findWorkingBridgeUrl();
       
-      // Only check in development environment
-      const response = await fetch(`${BRIDGE_URL}/api/health`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        signal: AbortSignal.timeout(3000)
-      });
-
-      if (response.ok) {
+      if (result) {
+        const { url, protocol } = result;
+        setBridgeProtocol(protocol);
+        
+        const response = await fetch(`${url}/api/health`);
         const data = await response.json();
+        
         setBridgeConnected(true);
         setDeviceConnected(data.deviceConnected || false);
         setLastCheck(new Date());
       } else {
         setBridgeConnected(false);
         setDeviceConnected(false);
+        setBridgeProtocol(null);
       }
     } catch (error) {
       // Bridge not running or not installed
       setBridgeConnected(false);
       setDeviceConnected(false);
+      setBridgeProtocol(null);
     } finally {
       setChecking(false);
     }
@@ -72,7 +93,6 @@ const FingerprintBridgeStatus = () => {
 
   /**
    * Download fingerprint bridge installer
-   * ✅ FIX: Download from static public file (works in production)
    */
   const handleDownload = async () => {
     try {

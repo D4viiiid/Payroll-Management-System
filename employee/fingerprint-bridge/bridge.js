@@ -1,27 +1,37 @@
 /**
- * 🔐 Fingerprint Bridge Server
+ * 🔐 Fingerprint Bridge Server (HTTPS)
  * 
  * Purpose: Acts as a local bridge between the cloud-deployed web app (Vercel)
  *          and the USB-connected ZKTeco fingerprint scanner
  * 
  * How it works:
  * 1. This server runs on the local machine with the fingerprint scanner
- * 2. The web app (on Vercel) calls http://localhost:3001 
+ * 2. The web app (on Vercel) calls https://localhost:3003 (HTTPS!)
  * 3. This server executes Python scripts to access the USB device
  * 4. Results are returned to the web app
+ * 
+ * HTTPS Mode:
+ * - Uses self-signed SSL certificate (cert.pem + key.pem)
+ * - Allows HTTPS Vercel app to connect (no Mixed Content blocking)
+ * - User accepts certificate warning once (safe for localhost)
+ * - Falls back to HTTP if certificates not found
  * 
  * Installation:
  * 1. Install Node.js (https://nodejs.org)
  * 2. Run: npm install
- * 3. Run: npm start
+ * 3. Run: node generate-certificate.js (creates SSL cert)
+ * 4. Run: npm start
  * 
  * Requirements:
  * - Node.js v14+
  * - Python 3.x with pyzkfp library installed
  * - ZKTeco fingerprint scanner connected via USB
+ * - OpenSSL (for certificate generation)
  */
 
 const express = require('express');
+const https = require('https');
+const http = require('http');
 const cors = require('cors');
 const { spawn } = require('child_process');
 const path = require('path');
@@ -468,35 +478,102 @@ if (!checkScripts()) {
   console.error('The server will start but fingerprint operations may fail.\n');
 }
 
-app.listen(PORT, () => {
-  console.log('\n' + '='.repeat(70));
-  console.log('🔐 FINGERPRINT BRIDGE SERVER v2.0');
-  console.log('='.repeat(70));
-  console.log(`✅ Server running on: http://localhost:${PORT}`);
-  console.log(`📁 Python scripts directory: ${PYTHON_SCRIPT_DIR}`);
-  console.log(`🐍 Capture script: ${path.basename(CAPTURE_SCRIPT)}`);
-  console.log(`🐍 Enrollment script: ${path.basename(ENROLLMENT_SCRIPT)}`);
-  console.log('\n📋 Available endpoints:');
-  console.log('   GET  /api/health                 - Health check + device status');
-  console.log('   GET  /api/device/status          - Detailed device status');
-  console.log('   POST /api/fingerprint/capture    - Capture fingerprint');
-  console.log('   POST /api/fingerprint/login      - Login with fingerprint');
-  console.log('   POST /api/fingerprint/enroll     - Enroll new fingerprint');
-  console.log('   POST /api/fingerprint/verify     - Verify fingerprint');
-  console.log('   POST /api/attendance/record      - Record attendance');
-  console.log('\n💡 Features:');
-  console.log('   🔌 Auto USB device detection');
-  console.log('   🚀 Can run as Windows Service (auto-start on boot)');
-  console.log('   🌐 CORS enabled for all origins (works with Vercel)');
-  console.log('   ⚡ Plug-and-play - just connect ZKTeco device');
-  console.log('\n📦 To install as Windows Service:');
-  console.log('   Run: INSTALL_AUTO_SERVICE.bat (as Administrator)');
-  console.log('\n🔌 USB Monitoring: ' + (usbDetection ? '✅ Active' : '⚠️  Disabled (install usb-detection)'));
-  console.log('='.repeat(70) + '\n');
+// ✅ HTTPS SUPPORT: Check for SSL certificates
+const SSL_CERT_PATH = path.join(__dirname, 'cert.pem');
+const SSL_KEY_PATH = path.join(__dirname, 'key.pem');
+const hasSSL = fs.existsSync(SSL_CERT_PATH) && fs.existsSync(SSL_KEY_PATH);
+
+let server;
+
+if (hasSSL) {
+  // ✅ HTTPS MODE: Create HTTPS server with SSL certificates
+  console.log('\n🔒 SSL certificates found - starting HTTPS server...\n');
   
-  // Initialize USB monitoring
-  initUSBMonitoring();
-});
+  const httpsOptions = {
+    cert: fs.readFileSync(SSL_CERT_PATH),
+    key: fs.readFileSync(SSL_KEY_PATH)
+  };
+  
+  server = https.createServer(httpsOptions, app);
+  
+  server.listen(PORT, () => {
+    console.log('\n' + '='.repeat(70));
+    console.log('🔐 FINGERPRINT BRIDGE SERVER v2.0 (HTTPS MODE)');
+    console.log('='.repeat(70));
+    console.log(`✅ Server running on: https://localhost:${PORT}`);
+    console.log(`� SSL Certificate: ${path.basename(SSL_CERT_PATH)}`);
+    console.log(`🔑 SSL Private Key: ${path.basename(SSL_KEY_PATH)}`);
+    console.log(`�📁 Python scripts directory: ${PYTHON_SCRIPT_DIR}`);
+    console.log(`🐍 Capture script: ${path.basename(CAPTURE_SCRIPT)}`);
+    console.log(`🐍 Enrollment script: ${path.basename(ENROLLMENT_SCRIPT)}`);
+    console.log('\n📋 Available endpoints:');
+    console.log('   GET  /api/health                 - Health check + device status');
+    console.log('   GET  /api/device/status          - Detailed device status');
+    console.log('   POST /api/fingerprint/capture    - Capture fingerprint');
+    console.log('   POST /api/fingerprint/login      - Login with fingerprint');
+    console.log('   POST /api/fingerprint/enroll     - Enroll new fingerprint');
+    console.log('   POST /api/fingerprint/verify     - Verify fingerprint');
+    console.log('   POST /api/attendance/record      - Record attendance');
+    console.log('\n💡 Features:');
+    console.log('   🔌 Auto USB device detection');
+    console.log('   🚀 Can run as Windows Service (auto-start on boot)');
+    console.log('   🌐 CORS enabled for all origins (works with Vercel)');
+    console.log('   ⚡ Plug-and-play - just connect ZKTeco device');
+    console.log('   🔒 HTTPS enabled - works from Vercel production!');
+    console.log('\n⚠️  FIRST TIME SETUP:');
+    console.log('   When accessing https://localhost:3003 from browser:');
+    console.log('   1. Browser shows "Not Secure" warning (self-signed cert)');
+    console.log('   2. Click "Advanced" → "Proceed to localhost (unsafe)"');
+    console.log('   3. This is SAFE - it\'s your own computer!');
+    console.log('   4. Browser remembers - no warning on future visits');
+    console.log('\n📦 To install as Windows Service:');
+    console.log('   Run: INSTALL_AUTO_SERVICE.bat (as Administrator)');
+    console.log('\n🔌 USB Monitoring: ' + (usbDetection ? '✅ Active' : '⚠️  Disabled (install usb-detection)'));
+    console.log('='.repeat(70) + '\n');
+    
+    // Initialize USB monitoring
+    initUSBMonitoring();
+  });
+  
+} else {
+  // ⚠️  HTTP FALLBACK: No SSL certificates found
+  console.log('\n⚠️  SSL certificates not found - starting HTTP server...\n');
+  console.log('💡 To enable HTTPS (required for Vercel connection):');
+  console.log('   Run: node generate-certificate.js\n');
+  
+  server = http.createServer(app);
+  
+  server.listen(PORT, () => {
+    console.log('\n' + '='.repeat(70));
+    console.log('🔐 FINGERPRINT BRIDGE SERVER v2.0 (HTTP MODE)');
+    console.log('='.repeat(70));
+    console.log(`⚠️  Server running on: http://localhost:${PORT}`);
+    console.log(`❌ HTTPS not enabled - Vercel app cannot connect!`);
+    console.log(`📁 Python scripts directory: ${PYTHON_SCRIPT_DIR}`);
+    console.log(`🐍 Capture script: ${path.basename(CAPTURE_SCRIPT)}`);
+    console.log(`🐍 Enrollment script: ${path.basename(ENROLLMENT_SCRIPT)}`);
+    console.log('\n📋 Available endpoints:');
+    console.log('   GET  /api/health                 - Health check + device status');
+    console.log('   GET  /api/device/status          - Detailed device status');
+    console.log('   POST /api/fingerprint/capture    - Capture fingerprint');
+    console.log('   POST /api/fingerprint/login      - Login with fingerprint');
+    console.log('   POST /api/fingerprint/enroll     - Enroll new fingerprint');
+    console.log('   POST /api/fingerprint/verify     - Verify fingerprint');
+    console.log('   POST /api/attendance/record      - Record attendance');
+    console.log('\n💡 Features:');
+    console.log('   🔌 Auto USB device detection');
+    console.log('   🚀 Can run as Windows Service (auto-start on boot)');
+    console.log('   🌐 CORS enabled for all origins');
+    console.log('   ⚡ Plug-and-play - just connect ZKTeco device');
+    console.log('\n📦 To install as Windows Service:');
+    console.log('   Run: INSTALL_AUTO_SERVICE.bat (as Administrator)');
+    console.log('\n🔌 USB Monitoring: ' + (usbDetection ? '✅ Active' : '⚠️  Disabled (install usb-detection)'));
+    console.log('='.repeat(70) + '\n');
+    
+    // Initialize USB monitoring
+    initUSBMonitoring();
+  });
+}
 
 // Graceful shutdown
 process.on('SIGINT', () => {

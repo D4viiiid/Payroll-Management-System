@@ -71,6 +71,7 @@ const filesToInclude = [
   'package.json',
   'install-service.js',
   'uninstall-service.js',
+  'generate-certificate.js', // ✅ NEW: SSL certificate generator
   'INSTALL_AUTO_SERVICE.bat',
   'UNINSTALL_SERVICE.bat',
   'START_BRIDGE.bat',

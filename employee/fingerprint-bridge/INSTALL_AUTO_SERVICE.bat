@@ -90,6 +90,17 @@ echo [5/6] Installing local dependencies...
 call npm install
 
 echo.
+echo [5.5/6] Generating SSL certificate for HTTPS...
+echo This allows the Vercel web app to connect to the bridge!
+node generate-certificate.js
+if %errorLevel% equ 0 (
+    echo ✅ SSL certificate generated successfully
+) else (
+    echo ⚠️  SSL certificate generation failed - bridge will run in HTTP mode
+    echo    Install OpenSSL or Git for Windows to enable HTTPS
+)
+
+echo.
 echo [6/6] Creating Windows Service...
 echo Running from directory: %CD%
 node install-service.js
@@ -107,12 +118,21 @@ echo.
 echo The Fingerprint Bridge Server is now running as a Windows Service.
 echo.
 echo Service Name: FingerprintBridgeService
-echo Status: Running on http://localhost:3003
+echo Status: Running on https://localhost:3003 (HTTPS enabled!)
 echo Auto-start: Enabled (starts with Windows)
 echo Installation Path: %CD%
 echo.
+echo ⚠️  IMPORTANT: First-time browser setup:
+echo   1. Open: https://localhost:3003/api/health
+echo   2. Browser shows "Not Secure" warning (self-signed certificate)
+echo   3. Click "Advanced" then "Proceed to localhost (unsafe)"
+echo   4. This is SAFE - it's your own computer!
+echo   5. Browser will remember - no warning on future visits
+echo.
+echo After accepting the certificate, the Vercel web app can connect! ✅
+echo.
 echo To verify it's running, open your browser and visit:
-echo   http://localhost:3003/api/health
+echo   https://localhost:3003/api/health
 echo.
 echo To manage the service:
 echo   - Stop:     net stop FingerprintBridgeService

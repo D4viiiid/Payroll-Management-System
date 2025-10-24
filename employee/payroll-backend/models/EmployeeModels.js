@@ -204,5 +204,8 @@ employeeSchema.methods.comparePin = async function (candidatePin) {
   return bcrypt.compare(candidatePin, this.adminPin);
 };
 
-const Employee = mongoose.model('Employee', employeeSchema);
+// ✅ CRITICAL FIX: Use Mongoose model registration that prevents duplicate model errors
+// If model already exists (from hot reload or duplicate file), use existing model
+// Otherwise, create new model
+const Employee = mongoose.models.Employee || mongoose.model('Employee', employeeSchema);
 export default Employee;

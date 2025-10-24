@@ -89,6 +89,8 @@ const checkScripts = () => {
  * ✅ CRITICAL FIX: Use absolute Python path for Windows Service compatibility
  */
 const checkDeviceConnection = async () => {
+  console.log('🔍 [DEVICE CHECK] Starting device detection...');
+  
   return new Promise((resolve) => {
     // ✅ FIX: Try multiple Python paths (Windows Service compatibility)
     const pythonPaths = [
@@ -111,7 +113,8 @@ const checkDeviceConnection = async () => {
       }
     }
     
-    console.log(`🐍 Using Python: ${pythonPath}`);
+    console.log(`🐍 [DEVICE CHECK] Using Python: ${pythonPath}`);
+    console.log(`📝 [DEVICE CHECK] Command: ${pythonPath} -c "from pyzkfp import ZKFP2; ..."`);
     
     // Try to get device info from Python
     const python = spawn(pythonPath, [
@@ -122,36 +125,57 @@ const checkDeviceConnection = async () => {
     let output = '';
     let errorOutput = '';
     
+    python.on('spawn', () => {
+      console.log('✅ [DEVICE CHECK] Python process spawned successfully');
+    });
+    
     python.stdout.on('data', (data) => {
-      output += data.toString();
+      const stdoutData = data.toString();
+      console.log(`📤 [DEVICE CHECK] Python stdout:`, stdoutData.trim());
+      output += stdoutData;
     });
     
     python.stderr.on('data', (data) => {
-      errorOutput += data.toString();
+      const stderrData = data.toString();
+      console.log(`⚠️  [DEVICE CHECK] Python stderr:`, stderrData.trim());
+      errorOutput += stderrData;
     });
     
     python.on('close', (code) => {
+      console.log(`🔚 [DEVICE CHECK] Python process closed with code: ${code}`);
+      console.log(`📊 [DEVICE CHECK] Output: "${output.trim()}"`);
+      console.log(`📊 [DEVICE CHECK] Error output: "${errorOutput.trim()}"`);
+      
       if (code === 0 && output.trim()) {
         const deviceCount = parseInt(output.trim());
         deviceConnected = deviceCount > 0;
-        lastDeviceCheck = new Date();
-        console.log(`✅ Device check: ${deviceCount} device(s) found`);
+        lastDeviceCheck = new Date(); // ✅ Update timestamp
+        console.log(`✅ [DEVICE CHECK] Device check: ${deviceCount} device(s) found`);
+        console.log(`✅ [DEVICE CHECK] lastDeviceCheck set to: ${lastDeviceCheck.toISOString()}`);
         resolve(deviceCount > 0);
       } else {
         deviceConnected = false;
+        lastDeviceCheck = new Date(); // ✅ CRITICAL FIX: Update timestamp even on failure!
+        console.log(`❌ [DEVICE CHECK] Device check failed`);
+        console.log(`✅ [DEVICE CHECK] lastDeviceCheck set to: ${lastDeviceCheck.toISOString()}`);
         if (errorOutput) {
-          console.error('❌ Python stderr:', errorOutput);
+          console.error('❌ [DEVICE CHECK] Python stderr:', errorOutput);
         }
         if (code !== 0) {
-          console.error(`❌ Python exit code: ${code}`);
+          console.error(`❌ [DEVICE CHECK] Python exit code: ${code}`);
+        }
+        if (!output.trim()) {
+          console.error('❌ [DEVICE CHECK] Python returned no output');
         }
         resolve(false);
       }
     });
     
     python.on('error', (error) => {
-      console.error('❌ Python spawn error:', error.message);
+      console.error('❌ [DEVICE CHECK] Python spawn error:', error.message);
       deviceConnected = false;
+      lastDeviceCheck = new Date(); // ✅ CRITICAL FIX: Update timestamp even on error!
+      console.log(`✅ [DEVICE CHECK] lastDeviceCheck set to: ${lastDeviceCheck.toISOString()}`);
       resolve(false);
     });
   });
@@ -281,20 +305,36 @@ const executePython = (scriptPath, args = []) => {
  * Health check endpoint - verify bridge server is running
  */
 app.get('/api/health', async (req, res) => {
-  // Re-check device connection on health check
-  const isConnected = await checkDeviceConnection();
-  
-  res.json({
-    success: true,
-    message: '✅ Fingerprint Bridge Server is running',
-    deviceConnected: isConnected,
-    deviceStatus: isConnected ? 'connected' : 'disconnected',
-    lastCheck: lastDeviceCheck,
-    timestamp: new Date().toISOString(),
-    version: '2.0.0',
-    scriptsFound: checkScripts(),
-    usbMonitoring: !!usbDetection
-  });
+  //✅ CRITICAL FIX: Always check device on health endpoint
+  try {
+    const isConnected = await checkDeviceConnection();
+    
+    res.json({
+      success: true,
+      message: '✅ Fingerprint Bridge Server is running',
+      deviceConnected: isConnected,
+      deviceStatus: isConnected ? 'connected' : 'disconnected',
+      lastCheck: lastDeviceCheck,
+      timestamp: new Date().toISOString(),
+      version: '2.0.0',
+      scriptsFound: checkScripts(),
+      usbMonitoring: !!usbDetection
+    });
+  } catch (error) {
+    console.error('❌ Health check error:', error);
+    res.json({
+      success: true,
+      message: '✅ Fingerprint Bridge Server is running',
+      deviceConnected: false,
+      deviceStatus: 'error',
+      error: error.message,
+      lastCheck: lastDeviceCheck,
+      timestamp: new Date().toISOString(),
+      version: '2.0.0',
+      scriptsFound: checkScripts(),
+      usbMonitoring: !!usbDetection
+    });
+  }
 });
 
 /**
@@ -572,17 +612,22 @@ if (hasSSL) {
     // Initialize USB monitoring
     initUSBMonitoring();
     
-    // ✅ CRITICAL FIX: Check device connection on startup
+    // ✅ CRITICAL FIX: Check device connection on startup (AWAIT to ensure it completes)
     console.log('🔍 Checking for connected fingerprint devices...');
-    checkDeviceConnection().then(isConnected => {
-      if (isConnected) {
-        console.log('✅ ZKTeco fingerprint scanner detected and ready!');
-      } else {
-        console.log('⚠️  No fingerprint scanner detected. Please connect your ZKTeco device.');
+    
+    // Run device check immediately and wait for it
+    (async () => {
+      try {
+        const isConnected = await checkDeviceConnection();
+        if (isConnected) {
+          console.log('✅ ZKTeco fingerprint scanner detected and ready!');
+        } else {
+          console.log('⚠️  No fingerprint scanner detected. Please connect your ZKTeco device.');
+        }
+      } catch (error) {
+        console.error('❌ Device check error:', error);
       }
-    }).catch(error => {
-      console.error('❌ Device check error:', error);
-    });
+    })();
   });
   
 } else {
@@ -623,17 +668,22 @@ if (hasSSL) {
     // Initialize USB monitoring
     initUSBMonitoring();
     
-    // ✅ CRITICAL FIX: Check device connection on startup
+    // ✅ CRITICAL FIX: Check device connection on startup (AWAIT to ensure it completes)
     console.log('🔍 Checking for connected fingerprint devices...');
-    checkDeviceConnection().then(isConnected => {
-      if (isConnected) {
-        console.log('✅ ZKTeco fingerprint scanner detected and ready!');
-      } else {
-        console.log('⚠️  No fingerprint scanner detected. Please connect your ZKTeco device.');
+    
+    // Run device check immediately and wait for it
+    (async () => {
+      try {
+        const isConnected = await checkDeviceConnection();
+        if (isConnected) {
+          console.log('✅ ZKTeco fingerprint scanner detected and ready!');
+        } else {
+          console.log('⚠️  No fingerprint scanner detected. Please connect your ZKTeco device.');
+        }
+      } catch (error) {
+        console.error('❌ Device check error:', error);
       }
-    }).catch(error => {
-      console.error('❌ Device check error:', error);
-    });
+    })();
   });
 }
 

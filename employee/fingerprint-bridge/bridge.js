@@ -48,7 +48,10 @@ app.use(express.json());
 
 // Configuration
 const PORT = process.env.BRIDGE_PORT || 3003;
-const PYTHON_SCRIPT_DIR = path.join(__dirname, '../Biometric_connect');
+// ✅ FIX: Check both possible locations (dev: ../Biometric_connect, prod: ./Biometric_connect)
+const PYTHON_SCRIPT_DIR_DEV = path.join(__dirname, '../Biometric_connect');
+const PYTHON_SCRIPT_DIR_PROD = path.join(__dirname, 'Biometric_connect');
+const PYTHON_SCRIPT_DIR = fs.existsSync(PYTHON_SCRIPT_DIR_PROD) ? PYTHON_SCRIPT_DIR_PROD : PYTHON_SCRIPT_DIR_DEV;
 const CAPTURE_SCRIPT = path.join(PYTHON_SCRIPT_DIR, 'capture_fingerprint_ipc_complete.py');
 const ENROLLMENT_SCRIPT = path.join(PYTHON_SCRIPT_DIR, 'main.py');
 

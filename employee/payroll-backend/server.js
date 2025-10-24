@@ -79,9 +79,28 @@ const app = express();
 // 🚀 PERFORMANCE: Initialize cache (TTL: 5 minutes by default)
 export const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
-// ✅ CORS Configuration with environment variable
+// ✅ CORS Configuration with environment variable + localhost support
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    
+    // List of allowed origins
+    const allowedOrigins = [
+      process.env.CORS_ORIGIN || 'https://employee-frontend-eight-rust.vercel.app',
+      'http://localhost:5173',  // ✅ Local frontend for fingerprint testing
+      'http://localhost:3000',  // Alternative local port
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:3000'
+    ];
+    
+    if (allowedOrigins.includes(origin) || process.env.CORS_ORIGIN === '*') {
+      callback(null, true);
+    } else {
+      console.log('⚠️ CORS rejected origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -98,7 +117,11 @@ const corsOptions = {
 };
 
 console.log('🔒 CORS Configuration:');
-console.log('   Allowed Origin:', corsOptions.origin);
+console.log('   Allowed Origins:', [
+  process.env.CORS_ORIGIN || 'https://employee-frontend-eight-rust.vercel.app',
+  'http://localhost:5173 (for fingerprint bridge testing)',
+  'http://localhost:3000'
+].join(', '));
 console.log('   Allowed Headers:', corsOptions.allowedHeaders.join(', '));
 
 // ✅ Middleware (must come first)

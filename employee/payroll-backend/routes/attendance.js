@@ -15,9 +15,11 @@ import { validateAttendanceForFraud, validateNoMultipleOpenShifts } from '../mid
 import { getPaginationParams, createPaginatedResponse, optimizeMongooseQuery } from '../utils/paginationHelper.js';
 import { setCacheHeaders } from '../middleware/cacheMiddleware.js';
 
-// Helper function to check MongoDB connection
+// ✅ CRITICAL FIX: Helper function to check ACTUAL MongoDB connection status
+// Now uses Mongoose connection state instead of static variable
 const isMongoConnected = () => {
-  return mongoConnected;
+  // mongoConnected is now a function exported from server.js
+  return mongoConnected(); // Call the function to get actual connection state
 };
 
 // Helper function to calculate work hours (excluding lunch break)

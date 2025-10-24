@@ -133,14 +133,16 @@ import { ensureDBConnection } from './middleware/dbMiddleware.js';
 
 // MongoDB Connection
 console.log('📗 Serverless MongoDB connection ready (will connect on first request)');
-let mongoConnected = false;
+
+// ✅ CRITICAL FIX: Export a FUNCTION that checks actual Mongoose connection state
+// Don't use a static variable that never updates!
+export const mongoConnected = () => {
+  return mongoose.connection.readyState === 1; // 1 = connected
+};
 
 // ✅ For serverless (Vercel), we connect on-demand per request, not at startup
 // Connection will be cached and reused across function invocations
 // This prevents "buffering timed out" errors and 500 responses
-
-// Export for use in routes
-export { mongoConnected };
 
 console.log('Loading routes...');
 

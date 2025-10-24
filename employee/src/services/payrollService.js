@@ -27,6 +27,17 @@ export const updatePayroll = async (id, payrollData) => {
   return response.data;
 };
 
+// ✅ CRITICAL FIX ISSUE #2: Add dedicated archive/restore methods
+export const archivePayroll = async (id) => {
+  const response = await axios.put(`${API_BASE}/payrolls/${id}/archive`, {}, getAuthConfig());
+  return response.data;
+};
+
+export const restorePayroll = async (id) => {
+  const response = await axios.put(`${API_BASE}/payrolls/${id}/restore`, {}, getAuthConfig());
+  return response.data;
+};
+
 export const deletePayroll = async (id) => {
   const response = await axios.delete(`${API_BASE}/payrolls/${id}`, getAuthConfig());
   return response.data;

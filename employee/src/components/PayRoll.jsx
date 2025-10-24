@@ -6,7 +6,7 @@ import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import './Admin.responsive.css';
 
-import { getAllPayrolls, createPayroll, updatePayroll, deletePayroll } from "../services/payrollService";
+import { getAllPayrolls, createPayroll, updatePayroll, deletePayroll, archivePayroll, restorePayroll } from "../services/payrollService";
 import { getCurrentSalaryRate } from "../services/salaryRateService";
 
 const Payroll = () => {
@@ -640,7 +640,7 @@ const Payroll = () => {
     });
   };
 
-  // Archive Payroll
+  // ✅ CRITICAL FIX ISSUE #2: Archive Payroll - Use dedicated archive endpoint
   const handleArchive = async (id) => {
     if (window.confirm('Are you sure you want to archive this payroll record?\n\nArchived records will be moved to the archive section and can be restored later.')) {
       try {
@@ -652,15 +652,8 @@ const Payroll = () => {
           return;
         }
 
-        // Update the payroll status to 'archived'
-        const updatedPayroll = {
-          ...payrollToArchive,
-          status: 'archived',
-          archivedAt: new Date().toISOString()
-        };
-        
-        // Call update service to mark as archived
-        await updatePayroll(id, updatedPayroll);
+        // ✅ FIX: Call dedicated archive endpoint instead of general update
+        await archivePayroll(id);
         
         // Refresh the payrolls list
         const updatedPayrolls = await getAllPayrolls();
@@ -684,15 +677,8 @@ const Payroll = () => {
       try {
         const payrollToRestore = archivedPayrolls.find(p => p._id === id);
         if (payrollToRestore) {
-          // Update the payroll status to 'active'
-          const updatedPayroll = {
-            ...payrollToRestore,
-            status: 'active',
-            archivedAt: null
-          };
-          
-          // Call update service to mark as active
-          await updatePayroll(id, updatedPayroll);
+          // ✅ FIX: Call dedicated restore endpoint instead of general update
+          await restorePayroll(id);
           
           // Refresh both lists
           const updatedPayrolls = await getAllPayrolls();
@@ -1927,8 +1913,18 @@ const Payroll = () => {
                 <div className="overflow-x-auto bg-white p-4 rounded-lg shadow-md">
                   <div className="flex justify-between items-center mb-4">
                     <h2 className="text-2xl font-bold text-gray-800">Archived Payroll Records</h2>
-                    <div className="text-sm text-gray-600">
-                      {archivedPayrolls.length} archived record{archivedPayrolls.length !== 1 ? 's' : ''}
+                    <div className="flex items-center space-x-4">
+                      <div className="text-sm text-gray-600">
+                        {archivedPayrolls.length} archived record{archivedPayrolls.length !== 1 ? 's' : ''}
+                      </div>
+                      {/* ✅ FIX ISSUE #2: Add "Back to Main" button */}
+                      <button
+                        onClick={() => setShowArchiveHistory(false)}
+                        className="bg-pink-500 text-white px-4 py-2 rounded hover:bg-pink-600 transition duration-200 flex items-center"
+                      >
+                        <i className="fas fa-arrow-left mr-2"></i>
+                        Back to Main
+                      </button>
                     </div>
                   </div>
 

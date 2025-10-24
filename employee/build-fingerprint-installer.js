@@ -89,6 +89,38 @@ filesToInclude.forEach(file => {
   }
 });
 
+// ✅ ADD PYTHON SCRIPTS - CRITICAL FOR DEVICE FUNCTIONALITY
+const BIOMETRIC_DIR = path.join(__dirname, 'Biometric_connect');
+const pythonScriptsToInclude = [
+  'capture_fingerprint_ipc_complete.py',
+  'main.py',
+  '__init__.py'
+];
+
+console.log('\n🐍 Adding Python scripts:\n');
+
+// Create Biometric_connect folder in archive
+pythonScriptsToInclude.forEach(file => {
+  const filePath = path.join(BIOMETRIC_DIR, file);
+  if (fs.existsSync(filePath)) {
+    archive.file(filePath, { name: `fingerprint-bridge/Biometric_connect/${file}` });
+    console.log(`   ✓ Biometric_connect/${file}`);
+  } else {
+    console.log(`   ✗ Biometric_connect/${file} (not found, skipping)`);
+  }
+});
+
+// Add requirements.txt for Python dependencies
+const requirementsTxt = `# Python Dependencies for Fingerprint Bridge
+# Install with: pip install -r requirements.txt
+
+pyzkfp>=1.0.0
+pymongo>=4.5.0
+python-dotenv>=1.0.0
+`;
+archive.append(requirementsTxt, { name: 'fingerprint-bridge/requirements.txt' });
+console.log('   ✓ requirements.txt (Python dependencies)');
+
 // Add installation guide
 const installGuide = `
 ╔════════════════════════════════════════════════════════════════════════════╗

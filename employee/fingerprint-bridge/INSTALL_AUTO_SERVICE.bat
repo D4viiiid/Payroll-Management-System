@@ -37,20 +37,65 @@ if %errorLevel% neq 0 (
 )
 
 echo.
-echo [1/4] Installing node-windows package...
+echo [1/6] Checking Python installation...
+python --version >nul 2>&1
+if %errorLevel% neq 0 (
+    echo.
+    echo ERROR: Python is not installed or not in PATH!
+    echo Please install Python 3.7 or later from: https://www.python.org/downloads/
+    echo Make sure to check "Add Python to PATH" during installation!
+    echo.
+    pause
+    exit /b 1
+)
+python --version
+echo ✅ Python found
+
+echo.
+echo [2/6] Installing Python dependencies (pyzkfp, pymongo)...
+if exist requirements.txt (
+    pip install -r requirements.txt
+    if %errorLevel% neq 0 (
+        echo.
+        echo WARNING: Some Python packages failed to install
+        echo Trying individual packages...
+        pip install pyzkfp pymongo python-dotenv
+    )
+) else (
+    echo requirements.txt not found, installing packages manually...
+    pip install pyzkfp pymongo python-dotenv
+)
+echo ✅ Python dependencies installed
+
+echo.
+echo [3/6] Checking Node.js installation...
+node --version >nul 2>&1
+if %errorLevel% neq 0 (
+    echo.
+    echo ERROR: Node.js is not installed or not in PATH!
+    echo Please install Node.js 14+ from: https://nodejs.org
+    echo.
+    pause
+    exit /b 1
+)
+node --version
+echo ✅ Node.js found
+
+echo.
+echo [4/6] Installing node-windows package...
 call npm install node-windows
 
 echo.
-echo [2/4] Installing local dependencies...
+echo [5/6] Installing local dependencies...
 call npm install
 
 echo.
-echo [3/4] Creating Windows Service...
+echo [6/6] Creating Windows Service...
 echo Running from directory: %CD%
 node install-service.js
 
 echo.
-echo [4/4] Starting service...
+echo [FINAL] Starting service...
 timeout /t 3 /nobreak >nul
 net start FingerprintBridgeService
 

@@ -9,12 +9,20 @@
     "install-service": "node install-service.js",
     "uninstall-service": "node uninstall-service.js"
   },
-  "keywords": ["fingerprint", "zkteco", "biometric", "usb", "bridge", "windows-service"],
+  "keywords": [
+    "fingerprint",
+    "zkteco",
+    "biometric",
+    "usb",
+    "bridge",
+    "windows-service"
+  ],
   "author": "Allan",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
     "node-windows": "^1.0.0-beta.8",
     "usb-detection": "^4.14.2"
   },

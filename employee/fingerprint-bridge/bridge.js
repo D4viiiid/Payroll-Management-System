@@ -29,12 +29,15 @@
  * - OpenSSL (for certificate generation)
  */
 
+// ✅ Load environment variables from config.env
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../payroll-backend/config.env') });
+
 const express = require('express');
 const https = require('https');
 const http = require('http');
 const cors = require('cors');
 const { spawn } = require('child_process');
-const path = require('path');
 const fs = require('fs');
 
 // USB Device Auto-Detection
@@ -242,6 +245,7 @@ const initUSBMonitoring = () => {
 /**
  * Execute Python script and return JSON result
  * ✅ CRITICAL FIX: Use absolute Python path for Windows Service compatibility
+ * ✅ CRITICAL FIX: Pass MONGODB_URI environment variable to Python scripts
  */
 const executePython = (scriptPath, args = []) => {
   return new Promise((resolve, reject) => {
@@ -267,7 +271,13 @@ const executePython = (scriptPath, args = []) => {
     
     console.log(`🐍 Executing: ${pythonPath} ${scriptPath} ${args.join(' ')}`);
     
-    const python = spawn(pythonPath, [scriptPath, ...args]);
+    // ✅ FIX: Pass environment variables to Python process
+    const python = spawn(pythonPath, [scriptPath, ...args], {
+      env: {
+        ...process.env,
+        MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/employee_db'
+      }
+    });
     
     let stdout = '';
     let stderr = '';

@@ -54,14 +54,47 @@ def enroll_fingerprint(employee_data):
         for i in range(3):
             log(f"\n🔍 Scan {i+1}/3 - Place your finger on the scanner...")
             
-            # Capture fingerprint
-            while True:
-                tmp, img = zkfp2.AcquireFingerprint()
-                if tmp:
-                    templates.append(tmp)
-                    log(f"✅ Scan {i+1}/3 captured successfully!")
-                    log("   Remove your finger and wait 2 seconds...")
-                    break
+            # Capture fingerprint with timeout and error handling
+            capture_attempts = 0
+            max_attempts = 100  # Maximum attempts per scan (about 10 seconds)
+            
+            while capture_attempts < max_attempts:
+                capture_attempts += 1
+                
+                try:
+                    # ✅ FIX: Handle None return value from AcquireFingerprint()
+                    result = zkfp2.AcquireFingerprint()
+                    
+                    if result is None:
+                        # Device returned None - continue waiting
+                        continue
+                    
+                    tmp, img = result
+                    
+                    if tmp and len(tmp) > 0:
+                        templates.append(tmp)
+                        log(f"✅ Scan {i+1}/3 captured successfully!")
+                        if i < 2:  # Don't wait after last scan
+                            log("   Remove your finger and wait 2 seconds...")
+                            import time
+                            time.sleep(2)
+                        break
+                    
+                except (TypeError, ValueError) as e:
+                    # Handle unpacking errors gracefully
+                    log(f"⚠️  Capture attempt {capture_attempts}: {str(e)}")
+                    continue
+                except Exception as e:
+                    log(f"❌ Unexpected error during capture: {str(e)}")
+                    raise
+            
+            # Check if we got the fingerprint
+            if len(templates) != i + 1:
+                return {
+                    "success": False,
+                    "error": f"Failed to capture scan {i+1}/3 after {max_attempts} attempts. Please ensure your finger is properly placed on the scanner.",
+                    "message": "Fingerprint enrollment failed - capture timeout"
+                }
         
         # Merge templates
         log("\n🔀 Merging fingerprint templates...")

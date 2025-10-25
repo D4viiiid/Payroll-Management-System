@@ -129,50 +129,88 @@ def capture_and_record_attendance():
                 print(f"Capture attempt failed: {e}", file=sys.stderr)
                 time.sleep(0.1)
 
-        # Terminate device connection
-        zkfp2.Terminate()
+        # Terminate device connection - MUST keep device open for matching!
+        # zkfp2.Terminate()  # ← DON'T terminate yet, need for matching!
 
         if not captured_template:
+            zkfp2.Terminate()
             return {
                 "success": False,
                 "error": "Fingerprint capture timeout - no finger detected within 25 seconds"
             }
 
-        # ✅ FIX: Use fingerprint matching instead of exact comparison
+        # ✅ FIX: Use pyzkfp's DB matching instead of exact comparison
         # Get all enrolled employees
         employees_collection = db.employees
-        enrolled_employees = employees_collection.find({
+        enrolled_employees = list(employees_collection.find({
             "fingerprintEnrolled": True,
             "isActive": True,
             "fingerprintTemplate": {"$exists": True, "$ne": None}
-        })
+        }))
 
-        # Try to match captured fingerprint with enrolled templates
-        matched_employee = None
+        if not enrolled_employees:
+            zkfp2.Terminate()
+            return {
+                "success": False,
+                "error": "No enrolled employees found in database"
+            }
+
+        # Build template database for matching
+        template_list = []
+        employee_list = []
+        
         for emp in enrolled_employees:
             try:
                 # Decode stored template from base64
                 stored_template = base64.b64decode(emp['fingerprintTemplate'])
-                
-                # Use IdentifyTemplate for matching (more reliable than Match)
-                # IdentifyTemplate returns index if match found, -1 if no match
-                # We'll do simple comparison instead since SIMPLE algorithm isn't implemented
-                # For now, we'll use a workaround: exact match on template bytes
-                if stored_template == captured_template:
-                    matched_employee = emp
-                    break
+                template_list.append(stored_template)
+                employee_list.append(emp)
             except Exception as e:
-                # Skip this employee if template decoding fails
-                print(f"Error matching employee {emp.get('employeeId')}: {e}", file=sys.stderr)
+                print(f"Error decoding template for {emp.get('employeeId')}: {e}", file=sys.stderr)
                 continue
 
-        if not matched_employee:
+        if not template_list:
+            zkfp2.Terminate()
             return {
                 "success": False,
-                "error": "Fingerprint not recognized - please enroll first or contact administrator"
+                "error": "No valid fingerprint templates found"
             }
-        
-        employee = matched_employee
+
+        # Use DB1toN matching (1-to-many matching)
+        try:
+            # DBMatch compares captured template against template database
+            match_result = zkfp2.DBMatch(captured_template, template_list)
+            
+            zkfp2.Terminate()  # Now we can terminate
+            
+            if match_result >= 0:
+                # Match found at index match_result
+                employee = employee_list[match_result]
+            else:
+                return {
+                    "success": False,
+                    "error": "Fingerprint not recognized - please try again or contact administrator"
+                }
+        except Exception as e:
+            zkfp2.Terminate()
+            # If DBMatch fails (SIMPLE not implemented), fall back to exact match as last resort
+            print(f"DBMatch failed: {e}, trying fallback matching...", file=sys.stderr)
+            
+            matched_employee = None
+            for idx, stored_template in enumerate(template_list):
+                # Fallback: Check if templates are similar enough (this is NOT ideal!)
+                # This won't work well but better than nothing
+                if stored_template == captured_template:
+                    matched_employee = employee_list[idx]
+                    break
+            
+            if not matched_employee:
+                return {
+                    "success": False,
+                    "error": f"Fingerprint matching failed: {str(e)}"
+                }
+            
+            employee = matched_employee
 
         # Determine Time In or Time Out based on last attendance
         attendance_collection = db.attendances
@@ -334,25 +372,81 @@ def capture_and_login():
                 print(f"Capture attempt failed: {e}", file=sys.stderr)
                 time.sleep(0.1)
 
-        # Terminate device connection
-        zkfp2.Terminate()
-
         if not captured_template:
+            zkfp2.Terminate()
             return {
                 "success": False,
                 "error": "Fingerprint capture timeout - no finger detected within 25 seconds"
             }
 
-        # Convert template to base64 for database lookup
-        template_b64 = base64.b64encode(captured_template).decode('utf-8')
+        # DON'T terminate device yet - need it for DBMatch!
+        # zkfp2.Terminate()  # ← Moved to after matching
 
         # Look up employee by fingerprint template
         employees_collection = db.employees
-        employee = employees_collection.find_one({
-            "fingerprintTemplate": template_b64,
+        enrolled_employees = list(employees_collection.find({
             "fingerprintEnrolled": True,
-            "isActive": True
-        })
+            "isActive": True,
+            "fingerprintTemplate": {"$exists": True, "$ne": ""}
+        }))
+
+        if not enrolled_employees:
+            zkfp2.Terminate()
+            return {
+                "success": False,
+                "error": "No enrolled employees found in database"
+            }
+
+        # Build template database for DBMatch
+        template_list = []
+        employee_list = []
+        for emp in enrolled_employees:
+            try:
+                stored_template = base64.b64decode(emp['fingerprintTemplate'])
+                template_list.append(stored_template)
+                employee_list.append(emp)
+            except Exception as e:
+                print(f"Error decoding template for {emp.get('employeeId')}: {e}", file=sys.stderr)
+                continue
+
+        if not template_list:
+            zkfp2.Terminate()
+            return {
+                "success": False,
+                "error": "No valid fingerprint templates found"
+            }
+
+        # Use DBMatch for fuzzy fingerprint matching (1-to-many)
+        employee = None
+        try:
+            match_result = zkfp2.DBMatch(captured_template, template_list)
+            zkfp2.Terminate()  # Now safe to terminate
+
+            if match_result >= 0:
+                # Found match at index match_result
+                employee = employee_list[match_result]
+                print(f"✅ Fingerprint matched: {employee.get('employeeId')} - {employee.get('firstName')} {employee.get('lastName')}", file=sys.stderr)
+            else:
+                return {
+                    "success": False,
+                    "error": "Fingerprint not recognized - please enroll first or contact administrator"
+                }
+
+        except Exception as e:
+            zkfp2.Terminate()
+            print(f"⚠️ DBMatch failed: {e}, trying fallback exact match...", file=sys.stderr)
+
+            # Fallback: Try exact byte comparison (may not work well for fingerprints)
+            for emp in employee_list:
+                try:
+                    stored_template = base64.b64decode(emp['fingerprintTemplate'])
+                    if stored_template == captured_template:
+                        employee = emp
+                        print(f"✅ Fingerprint matched (fallback): {employee.get('employeeId')}", file=sys.stderr)
+                        break
+                except Exception as decode_error:
+                    print(f"Decode error during fallback: {decode_error}", file=sys.stderr)
+                    continue
 
         if not employee:
             return {

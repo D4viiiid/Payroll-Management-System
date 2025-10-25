@@ -758,11 +758,12 @@ if (hasSSL) {
     console.log('🔐 FINGERPRINT BRIDGE SERVER v2.0 (HTTPS MODE)');
     console.log('='.repeat(70));
     console.log(`✅ Server running on: https://localhost:${PORT}`);
-    console.log(`� SSL Certificate: ${path.basename(SSL_CERT_PATH)}`);
+    console.log(`🔒 SSL Certificate: ${path.basename(SSL_CERT_PATH)}`);
     console.log(`🔑 SSL Private Key: ${path.basename(SSL_KEY_PATH)}`);
-    console.log(`�📁 Python scripts directory: ${PYTHON_SCRIPT_DIR}`);
+    console.log(`📁 Python scripts directory: ${PYTHON_SCRIPT_DIR}`);
     console.log(`🐍 Capture script: ${path.basename(CAPTURE_SCRIPT)}`);
     console.log(`🐍 Enrollment script: ${path.basename(ENROLLMENT_SCRIPT)}`);
+    console.log(`💾 MongoDB URI: ${process.env.MONGODB_URI ? '✅ Configured' : '❌ Missing'}`);
     console.log('\n📋 Available endpoints:');
     console.log('   GET  /api/health                 - Health check + device status');
     console.log('   GET  /api/device/status          - Detailed device status');
@@ -826,6 +827,7 @@ if (hasSSL) {
     console.log(`📁 Python scripts directory: ${PYTHON_SCRIPT_DIR}`);
     console.log(`🐍 Capture script: ${path.basename(CAPTURE_SCRIPT)}`);
     console.log(`🐍 Enrollment script: ${path.basename(ENROLLMENT_SCRIPT)}`);
+    console.log(`💾 MongoDB URI: ${process.env.MONGODB_URI ? '✅ Configured' : '❌ Missing'}`);
     console.log('\n📋 Available endpoints:');
     console.log('   GET  /api/health                 - Health check + device status');
     console.log('   GET  /api/device/status          - Detailed device status');

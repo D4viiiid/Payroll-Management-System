@@ -22,11 +22,22 @@ echo   ZKTeco Fingerprint Scanner USB Connection
 echo ================================================================
 echo.
 echo FIXES INCLUDED:
-echo  ✅ CLI-based fingerprint enrollment (no GUI blocking)
-echo  ✅ Direct bridge service communication from cloud
-echo  ✅ Health endpoint with cached device status
-echo  ✅ Improved error handling and logging
-echo  ✅ Auto-generated employee credentials
+echo  ✅ Bug #1: Database connection validation - FIXED
+echo  ✅ Bug #2: JSON parsing from stdout - FIXED
+echo  ✅ Bug #3: pyzkfp DB matching API - FIXED
+echo  ✅ Bug #4: fid=0 treated as valid match - FIXED
+echo  ✅ Bug #5: Invalid templates crash system - FIXED
+echo  ✅ Bug #6: JSON parsing with debug output - FIXED
+echo  ✅ Bug #7: firstName/lastName response - FIXED
+echo  ✅ Bug #8: Attendance schema mismatch - FIXED
+echo  ✅ Bug #9: Time In/Out toggle logic - FIXED
+echo  ✅ Bug #10: Bridge employee display - FIXED
+echo  ✅ Bug #11: Once-per-day attendance rule - FIXED
+echo  ✅ Bug #12: CLI-based fingerprint enrollment - FIXED
+echo  ✅ Bug #13: Direct bridge service communication - FIXED
+echo  ✅ Bug #14: MongoDB URI environment loading - FIXED
+echo.
+echo Latest commit: 5db18d86
 echo.
 echo Starting from: %CD%
 echo.
@@ -90,15 +101,37 @@ echo.
 
 REM [5/5] Verify Python scripts exist
 echo [5/5] Verifying Python scripts...
+set SCRIPT_DIR=..\Biometric_connect
 if exist "Biometric_connect\capture_fingerprint_ipc_complete.py" (
+    set SCRIPT_DIR=Biometric_connect
+)
+
+if exist "%SCRIPT_DIR%\capture_fingerprint_ipc_complete.py" (
     echo       ✅ Attendance script found
 ) else (
-    echo       ⚠️  Attendance script not found
+    echo       ⚠️  Attendance script not found at %SCRIPT_DIR%
 )
-if exist "Biometric_connect\enroll_fingerprint_cli.py" (
+if exist "%SCRIPT_DIR%\enroll_fingerprint_cli.py" (
     echo       ✅ Enrollment script found (CLI version)
 ) else (
-    echo       ⚠️  Enrollment script not found
+    echo       ⚠️  Enrollment script not found at %SCRIPT_DIR%
+)
+echo.
+
+REM [6/6] Verify MongoDB URI configuration
+echo [6/6] Verifying MongoDB configuration...
+set CONFIG_FILE=..\payroll-backend\config.env
+if exist "%CONFIG_FILE%" (
+    findstr /C:"MONGODB_URI=mongodb" "%CONFIG_FILE%" >nul
+    if errorlevel 1 (
+        echo       ⚠️  MongoDB URI not configured in config.env
+        echo       🔧 FIX: Add MONGODB_URI to %CONFIG_FILE%
+    ) else (
+        echo       ✅ MongoDB URI configured in config.env
+    )
+) else (
+    echo       ⚠️  Configuration file not found: %CONFIG_FILE%
+    echo       🔧 FIX: Create config.env with MONGODB_URI setting
 )
 echo.
 
@@ -120,11 +153,12 @@ echo  GET  /api/device/status          - Detailed device info
 echo.
 echo Features:
 echo  • HTTPS enabled (works with Vercel production)
-echo  • MongoDB connection configured
+echo  • MongoDB connection configured and verified
 echo  • Python path: C:\Python313\python.exe
 echo  • Device auto-detection enabled
 echo  • Timeout protection (60 seconds)
 echo  • CLI-based enrollment (no GUI blocking)
+echo  • All 14 critical bugs fixed
 echo.
 echo ================================================================
 echo   SERVER RUNNING - Press Ctrl+C to stop

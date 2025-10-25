@@ -246,8 +246,9 @@ const initUSBMonitoring = () => {
  * Execute Python script and return JSON result
  * ✅ CRITICAL FIX: Use absolute Python path for Windows Service compatibility
  * ✅ CRITICAL FIX: Pass MONGODB_URI environment variable to Python scripts
+ * ✅ CRITICAL FIX: Add timeout to prevent hanging
  */
-const executePython = (scriptPath, args = []) => {
+const executePython = (scriptPath, args = [], timeout = 60000) => {
   return new Promise((resolve, reject) => {
     // ✅ FIX: Try multiple Python paths (same logic as checkDeviceConnection)
     const pythonPaths = [
@@ -270,6 +271,7 @@ const executePython = (scriptPath, args = []) => {
     }
     
     console.log(`🐍 Executing: ${pythonPath} ${scriptPath} ${args.join(' ')}`);
+    console.log(`⏱️  Timeout: ${timeout}ms`);
     
     // ✅ FIX: Pass environment variables to Python process
     const python = spawn(pythonPath, [scriptPath, ...args], {
@@ -281,6 +283,21 @@ const executePython = (scriptPath, args = []) => {
     
     let stdout = '';
     let stderr = '';
+    let resolved = false;
+    
+    // ✅ CRITICAL: Add timeout to prevent hanging forever
+    const timeoutId = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        console.error(`❌ Python script timeout after ${timeout}ms`);
+        python.kill('SIGTERM');
+        reject({
+          success: false,
+          error: `Script execution timeout after ${timeout/1000} seconds`,
+          code: 'TIMEOUT'
+        });
+      }
+    }, timeout);
     
     python.stdout.on('data', (data) => {
       stdout += data.toString();
@@ -289,11 +306,17 @@ const executePython = (scriptPath, args = []) => {
     
     python.stderr.on('data', (data) => {
       stderr += data.toString();
-      console.error('❌', data.toString().trim());
+      console.error('⚠️ ', data.toString().trim());
     });
     
     python.on('close', (code) => {
+      if (resolved) return; // Already handled by timeout
+      resolved = true;
+      clearTimeout(timeoutId);
+      
       console.log(`✅ Python script exited with code: ${code}`);
+      console.log(`📊 stdout length: ${stdout.length} bytes`);
+      console.log(`📊 stderr length: ${stderr.length} bytes`);
       
       if (code === 0) {
         try {
@@ -301,6 +324,8 @@ const executePython = (scriptPath, args = []) => {
           const result = JSON.parse(stdout);
           resolve(result);
         } catch (e) {
+          console.error('❌ Failed to parse JSON output:', e.message);
+          console.error('📋 Raw output:', stdout);
           // If not JSON, return as plain text
           resolve({
             success: true,
@@ -311,13 +336,17 @@ const executePython = (scriptPath, args = []) => {
       } else {
         reject({
           success: false,
-          error: stderr || 'Script execution failed',
+          error: stderr || stdout || 'Script execution failed',
           code: code
         });
       }
     });
     
     python.on('error', (error) => {
+      if (resolved) return; // Already handled
+      resolved = true;
+      clearTimeout(timeoutId);
+      
       console.error('❌ Python execution error:', error);
       reject({
         success: false,
@@ -334,11 +363,28 @@ const executePython = (scriptPath, args = []) => {
 /**
  * GET /api/health
  * Health check endpoint - verify bridge server is running
+ * ✅ FIX: Don't check device on every health request (causes crashes)
  */
 app.get('/api/health', async (req, res) => {
-  //✅ CRITICAL FIX: Always check device on health endpoint
   try {
-    const isConnected = await checkDeviceConnection();
+    // ✅ CRITICAL FIX: Only check device if last check was > 30 seconds ago
+    // This prevents spamming device checks which can crash the process
+    const now = new Date();
+    const shouldCheckDevice = !lastDeviceCheck || (now - lastDeviceCheck) > 30000;
+    
+    let isConnected = deviceConnected; // Use cached value
+    
+    if (shouldCheckDevice) {
+      console.log('🔍 Health check: Running device check (>30s since last check)');
+      try {
+        isConnected = await checkDeviceConnection();
+      } catch (error) {
+        console.error('❌ Device check failed in health endpoint:', error);
+        // Don't crash - just use cached value
+      }
+    } else {
+      console.log('🔍 Health check: Using cached device status (checked recently)');
+    }
     
     res.json({
       success: true,
@@ -347,13 +393,16 @@ app.get('/api/health', async (req, res) => {
       deviceStatus: isConnected ? 'connected' : 'disconnected',
       lastCheck: lastDeviceCheck,
       timestamp: new Date().toISOString(),
-      version: '2.0.0',
+      version: '2.0.1',
       scriptsFound: checkScripts(),
-      usbMonitoring: !!usbDetection
+      usbMonitoring: !!usbDetection,
+      pythonPath: 'C:\\Python313\\python.exe',
+      mongodbUri: process.env.MONGODB_URI ? '✅ Configured' : '❌ Missing'
     });
   } catch (error) {
     console.error('❌ Health check error:', error);
-    res.json({
+    // ✅ CRITICAL: Still return 200 OK with error details
+    res.status(200).json({
       success: true,
       message: '✅ Fingerprint Bridge Server is running',
       deviceConnected: false,
@@ -361,7 +410,7 @@ app.get('/api/health', async (req, res) => {
       error: error.message,
       lastCheck: lastDeviceCheck,
       timestamp: new Date().toISOString(),
-      version: '2.0.0',
+      version: '2.0.1',
       scriptsFound: checkScripts(),
       usbMonitoring: !!usbDetection
     });
@@ -443,6 +492,7 @@ app.post('/api/fingerprint/login', async (req, res) => {
  * Enroll a new fingerprint (3 scans + merge)
  * 
  * Body: { employeeId, firstName, lastName, email }
+ * ✅ FIX: Better error handling and device validation
  */
 app.post('/api/fingerprint/enroll', async (req, res) => {
   try {
@@ -458,6 +508,24 @@ app.post('/api/fingerprint/enroll', async (req, res) => {
     }
     
     console.log(`📋 Employee: ${firstName} ${lastName} (ID: ${employeeId})`);
+    console.log('📋 Enrollment Script:', ENROLLMENT_SCRIPT);
+    console.log('📋 Script exists:', fs.existsSync(ENROLLMENT_SCRIPT));
+    
+    // ✅ CRITICAL: Verify device before attempting enrollment
+    if (!deviceConnected) {
+      console.log('⚠️  Device not connected - checking now...');
+      const isConnected = await checkDeviceConnection();
+      if (!isConnected) {
+        return res.status(400).json({
+          success: false,
+          message: 'Biometric device not available',
+          error: 'No ZKTeco fingerprint scanner detected. Please ensure device is connected and drivers are installed.',
+          deviceStatus: 'disconnected'
+        });
+      }
+    }
+    
+    console.log('✅ Device check passed - starting enrollment...');
     
     // Pass employee data as JSON argument to Python script
     const employeeData = JSON.stringify({
@@ -471,16 +539,27 @@ app.post('/api/fingerprint/enroll', async (req, res) => {
     
     if (result.success) {
       console.log('✅ Fingerprint enrollment completed successfully');
+    } else {
+      console.error('❌ Enrollment failed:', result.error);
     }
     
     res.json(result);
     
   } catch (error) {
     console.error('❌ Fingerprint enrollment failed:', error);
+    console.error('❌ Error stack:', error.stack);
+    
+    // ✅ CRITICAL: Return detailed error info
     res.status(500).json({
       success: false,
-      message: 'Fingerprint enrollment failed',
-      error: error.error || error.message
+      message: 'Biometric device not available',
+      error: error.error || error.message || 'Device initialization failed',
+      details: {
+        code: error.code,
+        pythonScript: ENROLLMENT_SCRIPT,
+        pythonPath: 'C:\\Python313\\python.exe',
+        deviceConnected: deviceConnected
+      }
     });
   }
 });
@@ -523,26 +602,60 @@ app.post('/api/fingerprint/verify', async (req, res) => {
 /**
  * POST /api/attendance/record
  * Capture fingerprint and record attendance directly
+ * ✅ FIX: Better error handling and logging
  */
 app.post('/api/attendance/record', async (req, res) => {
   try {
     console.log('\n📝 === ATTENDANCE RECORDING REQUEST ===');
+    console.log('📋 Timestamp:', new Date().toISOString());
+    console.log('📋 MongoDB URI:', process.env.MONGODB_URI ? '✅ Set' : '❌ Missing');
+    console.log('📋 Python Script:', CAPTURE_SCRIPT);
+    console.log('📋 Script exists:', fs.existsSync(CAPTURE_SCRIPT));
+    
+    // ✅ CRITICAL: Verify device before attempting capture
+    if (!deviceConnected) {
+      console.log('⚠️  Device not connected - checking now...');
+      const isConnected = await checkDeviceConnection();
+      if (!isConnected) {
+        return res.status(400).json({
+          success: false,
+          message: 'Biometric device not available',
+          error: 'No ZKTeco fingerprint scanner detected. Please ensure device is connected.',
+          deviceStatus: 'disconnected'
+        });
+      }
+    }
+    
+    console.log('✅ Device check passed - executing Python script...');
     
     // Use the direct mode which records attendance in database
     const result = await executePython(CAPTURE_SCRIPT, ['--direct']);
     
     if (result.success) {
       console.log('✅ Attendance recorded successfully');
+      console.log('📋 Employee:', result.employee?.name || 'N/A');
+      console.log('📋 Status:', result.attendance?.status || 'N/A');
+    } else {
+      console.error('❌ Python script returned error:', result.error);
     }
     
     res.json(result);
     
   } catch (error) {
     console.error('❌ Attendance recording failed:', error);
+    console.error('❌ Error stack:', error.stack);
+    
+    // ✅ CRITICAL: Return detailed error info
     res.status(500).json({
       success: false,
       message: 'Attendance recording failed',
-      error: error.error || error.message
+      error: error.error || error.message || 'Unknown error',
+      details: {
+        code: error.code,
+        pythonScript: CAPTURE_SCRIPT,
+        pythonPath: 'C:\\Python313\\python.exe',
+        mongodbConfigured: !!process.env.MONGODB_URI
+      }
     });
   }
 });

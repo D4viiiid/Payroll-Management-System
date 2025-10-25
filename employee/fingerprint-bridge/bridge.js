@@ -321,7 +321,29 @@ const executePython = (scriptPath, args = [], timeout = 60000) => {
       // ✅ FIX: Always try to parse JSON from stdout first, regardless of exit code
       // Python script returns JSON with success:false on failure, not just error text
       try {
-        const result = JSON.parse(stdout);
+        // ✅ FIX: Extract only the FIRST complete JSON object (pyzkfp adds debug output after JSON)
+        let jsonString = stdout.trim();
+        
+        // Find the first complete JSON object
+        const firstBrace = jsonString.indexOf('{');
+        if (firstBrace !== -1) {
+          let braceCount = 0;
+          let endIndex = firstBrace;
+          
+          for (let i = firstBrace; i < jsonString.length; i++) {
+            if (jsonString[i] === '{') braceCount++;
+            if (jsonString[i] === '}') braceCount--;
+            if (braceCount === 0) {
+              endIndex = i + 1;
+              break;
+            }
+          }
+          
+          // Extract only the JSON part
+          jsonString = jsonString.substring(firstBrace, endIndex);
+        }
+        
+        const result = JSON.parse(jsonString);
         // Return the parsed JSON result (resolve even if success:false)
         resolve(result);
       } catch (e) {

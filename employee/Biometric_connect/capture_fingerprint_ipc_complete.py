@@ -164,15 +164,19 @@ def capture_and_record_attendance():
 
             # Step 2: Add all enrolled templates to the database
             employee_map = {}  # Map fingerprint ID to employee
-            for idx, emp in enumerate(enrolled_employees):
+            fid_counter = 1  # ✅ FIX: Start from 1, not 0! (0 means no match)
+            
+            for emp in enrolled_employees:
                 try:
                     stored_template = base64.b64decode(emp['fingerprintTemplate'])
-                    fid = idx  # Use index as fingerprint ID
+                    fid = fid_counter  # Use sequential ID starting from 1
                     zkfp2.DBAdd(fid, stored_template)
                     employee_map[fid] = emp
                     print(f"  Added {emp.get('employeeId')} (fid={fid})", file=sys.stderr)
+                    fid_counter += 1
                 except Exception as e:
-                    print(f"⚠️ Error adding {emp.get('employeeId')}: {e}", file=sys.stderr)
+                    # ✅ FIX: Skip invalid templates (like EMP-1491) but continue
+                    print(f"⚠️ Skipping {emp.get('employeeId')}: {e}", file=sys.stderr)
                     continue
 
             if not employee_map:
@@ -188,22 +192,25 @@ def capture_and_record_attendance():
             match_result = zkfp2.DBIdentify(captured_template)
             
             # DBIdentify returns [fid, score]
+            # fid=0 means NO MATCH, fid>=1 means match found
             matched_fid = match_result[0]
             match_score = match_result[1]
 
             print(f"Match result: fid={matched_fid}, score={match_score}", file=sys.stderr)
 
-            if matched_fid in employee_map:
-                employee = employee_map[matched_fid]
-                print(f"✅ Matched: {employee.get('employeeId')} - {employee.get('firstName')} {employee.get('lastName')} (score={match_score})", file=sys.stderr)
-            else:
-                print(f"❌ No match found (fid={matched_fid} not in database)", file=sys.stderr)
+            # ✅ FIX: Check if fid is 0 (no match) OR not in our map
+            if matched_fid == 0 or matched_fid not in employee_map:
+                print(f"❌ No match found (fid={matched_fid}, threshold not met)", file=sys.stderr)
                 zkfp2.DBFree()
                 zkfp2.Terminate()
                 return {
                     "success": False,
                     "error": "Fingerprint not recognized - please enroll first or contact administrator"
                 }
+            
+            # Match found!
+            employee = employee_map[matched_fid]
+            print(f"✅ Matched: {employee.get('employeeId')} - {employee.get('firstName')} {employee.get('lastName')} (score={match_score})", file=sys.stderr)
 
             # Step 4: Clean up
             zkfp2.DBFree()
@@ -418,15 +425,18 @@ def capture_and_login():
 
             # Add all enrolled templates
             employee_map = {}
-            for idx, emp in enumerate(enrolled_employees):
+            fid_counter = 1  # ✅ FIX: Start from 1, not 0!
+            
+            for emp in enrolled_employees:
                 try:
                     stored_template = base64.b64decode(emp['fingerprintTemplate'])
-                    fid = idx
+                    fid = fid_counter
                     zkfp2.DBAdd(fid, stored_template)
                     employee_map[fid] = emp
                     print(f"  Added {emp.get('employeeId')} (fid={fid})", file=sys.stderr)
+                    fid_counter += 1
                 except Exception as e:
-                    print(f"⚠️ Error adding {emp.get('employeeId')}: {e}", file=sys.stderr)
+                    print(f"⚠️ Skipping {emp.get('employeeId')}: {e}", file=sys.stderr)
                     continue
 
             if not employee_map:
@@ -446,16 +456,17 @@ def capture_and_login():
 
             print(f"Login match result: fid={matched_fid}, score={match_score}", file=sys.stderr)
 
-            if matched_fid in employee_map:
-                employee = employee_map[matched_fid]
-                print(f"✅ Login matched: {employee.get('employeeId')} (score={match_score})", file=sys.stderr)
-            else:
+            # ✅ FIX: Check for fid=0 (no match)
+            if matched_fid == 0 or matched_fid not in employee_map:
                 zkfp2.DBFree()
                 zkfp2.Terminate()
                 return {
                     "success": False,
                     "error": "Fingerprint not recognized - please enroll first or contact administrator"
                 }
+            
+            employee = employee_map[matched_fid]
+            print(f"✅ Login matched: {employee.get('employeeId')} (score={match_score})", file=sys.stderr)
 
             # Clean up
             zkfp2.DBFree()
@@ -528,6 +539,9 @@ def main():
 
     # Output JSON result to stdout
     print(json.dumps(result))
+    
+    # ✅ FIX: Flush stdout BEFORE any cleanup that might trigger library debug output
+    sys.stdout.flush()
 
     # Exit with appropriate code
     sys.exit(0 if result.get("success", False) else 1)

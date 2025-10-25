@@ -114,6 +114,15 @@ def enroll_fingerprint(employee_data):
                 db = client['employee_db']
                 employees = db['employees']
                 
+                # ✅ FIX BUG #18: Use timezone-aware datetime instead of deprecated utcnow()
+                from datetime import timezone, timedelta
+                
+                # Philippines timezone (UTC+8)
+                philippines_tz = timezone(timedelta(hours=8))
+                current_time_ph = datetime.now(philippines_tz)
+                # Convert to naive datetime for MongoDB storage
+                current_time_naive = current_time_ph.replace(tzinfo=None)
+                
                 # Update employee with fingerprint template
                 result = employees.update_one(
                     {'_id': employee_id},
@@ -121,8 +130,8 @@ def enroll_fingerprint(employee_data):
                         '$set': {
                             'fingerprintTemplate': template_hex,
                             'fingerprintEnrolled': True,
-                            'fingerprintEnrollmentDate': datetime.utcnow(),
-                            'updatedAt': datetime.utcnow()
+                            'fingerprintEnrollmentDate': current_time_naive,
+                            'updatedAt': current_time_naive
                         }
                     }
                 )

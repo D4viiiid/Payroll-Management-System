@@ -559,8 +559,66 @@ const handleFingerprintEnrollment = async () => {
     setFingerprintStep(0);
     setCapturedFingerprintTemplate(null);
     
-    // Start fingerprint enrollment process
-    await handleFingerprintEnrollment();
+    // ✅ FIX BUG #17: Start re-enrollment with EXISTING employee data (don't generate new ID)
+    await handleFingerprintReEnrollment();
+  };
+
+  // === NEW: Fingerprint Re-Enrollment (uses existing employee credentials) ===
+  const handleFingerprintReEnrollment = async () => {
+    setIsEnrollingFingerprint(true);
+    setFingerprintStep(1); // Show scanning status
+    logger.log('👆 Starting fingerprint RE-enrollment for existing employee...');
+    
+    try {
+      // ✅ FIX: Use EXISTING employee data (don't generate new credentials)
+      const enrollResult = await biometricService.enrollEmployee({
+        _id: editingEmployee._id,
+        employeeId: editingEmployee.employeeId, // ✅ KEEP existing employee ID
+        firstName: editingEmployee.firstName,
+        lastName: editingEmployee.lastName,
+        email: editingEmployee.email
+      });
+      
+      logger.log('📸 Fingerprint re-enrollment result:', enrollResult);
+      
+      if (!enrollResult.success) {
+        throw new Error(enrollResult.message || enrollResult.error || 'Failed to re-enroll fingerprint');
+      }
+      
+      // Store the captured template in state
+      setCapturedFingerprintTemplate(enrollResult.template || enrollResult.fingerprintTemplate);
+      logger.log('✅ Fingerprint template stored in state (re-enrollment)');
+      
+      setFingerprintStep(2); // Success
+      logger.log('✅ Fingerprint re-captured! Credentials remain unchanged.');
+      toast.success('✅ Fingerprint re-enrolled successfully! Click "Update Employee" to save.');
+      
+      // Auto-submit the re-enrollment
+      setTimeout(async () => {
+        await handleSubmitReEnrollment();
+      }, 1500);
+      
+    } catch (error) {
+      logger.error('❌ Fingerprint re-enrollment error:', error);
+      
+      // Clear any stored template on error
+      setCapturedFingerprintTemplate(null);
+      
+      let userMessage = error.message || 'Unknown error';
+      
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        userMessage = 'Cannot connect to fingerprint service. Please make sure:\n1. Biometric device is connected\n2. Bridge server is running (START_BRIDGE.bat)\n3. Backend server is running (port 5000)';
+      } else if (error.message.includes('timeout')) {
+        userMessage = 'Fingerprint scan timed out. Please try again and place your finger firmly on the scanner.';
+      }
+      
+      toast.error('❌ Fingerprint Re-enrollment Failed:\n' + userMessage);
+      
+      setShowReEnrollSection(false);
+      setFingerprintStep(0);
+    } finally {
+      setIsEnrollingFingerprint(false);
+    }
   };
 
   // === SUBMIT RE-ENROLLMENT (Update existing employee with new fingerprint) ===

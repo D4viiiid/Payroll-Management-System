@@ -237,19 +237,31 @@ def capture_and_record_attendance():
         # Determine Time In or Time Out based on last attendance
         attendance_collection = db.attendances
 
-        # Get today's date (date only, no time)
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        # ✅ FIX BUG #18: Use Philippines timezone instead of UTC
+        # Philippines is UTC+8, so we need to convert to local time
+        from datetime import timezone, timedelta
+        
+        # Philippines timezone (UTC+8)
+        philippines_tz = timezone(timedelta(hours=8))
+        
+        # Get current time in Philippines timezone
+        current_time_ph = datetime.now(philippines_tz)
+        
+        # Get today's date in Philippines timezone (date only, no time)
+        today = current_time_ph.replace(hour=0, minute=0, second=0, microsecond=0)
         
         # Find last attendance record for this employee TODAY
         last_attendance = attendance_collection.find_one(
             {
                 "employeeId": employee["employeeId"],
-                "date": today
+                "date": today.replace(tzinfo=None)  # Store as naive datetime in DB
             },
             sort=[("_id", -1)]
         )
 
-        current_time = datetime.utcnow()
+        # Convert to naive datetime for MongoDB storage (MongoDB stores UTC internally)
+        current_time = current_time_ph.replace(tzinfo=None)
+        today_naive = today.replace(tzinfo=None)
         
         # Determine if this is Time In or Time Out
         if not last_attendance:
@@ -258,7 +270,7 @@ def capture_and_record_attendance():
             attendance_record = {
                 "employeeId": employee["employeeId"],
                 "employeeName": f"{employee['firstName']} {employee['lastName']}",
-                "date": today,
+                "date": today_naive,
                 "timeIn": current_time,
                 "timeOut": None,
                 "status": "present",
@@ -293,12 +305,12 @@ def capture_and_record_attendance():
         else:
             # Already has BOTH Time In AND Time Out today
             # DENY: Only ONE Time In/Out cycle allowed per day!
+            time_in_str = last_attendance['timeIn'].strftime('%I:%M %p') if last_attendance.get('timeIn') else 'N/A'
+            time_out_str = last_attendance['timeOut'].strftime('%I:%M %p') if last_attendance.get('timeOut') else 'N/A'
             return {
                 "success": False,
-                "error": f"Attendance already completed for today. {employee['firstName']} {employee['lastName']} has already timed in at {last_attendance['timeIn'].strftime('%I:%M %p')} and timed out at {last_attendance['timeOut'].strftime('%I:%M %p')}. Multiple attendance records per day are not allowed."
+                "error": f"Attendance already completed for today. {employee['firstName']} {employee['lastName']} has already timed in at {time_in_str} and timed out at {time_out_str}. Multiple attendance records per day are not allowed."
             }
-            result = attendance_collection.insert_one(attendance_record)
-            inserted_id = str(result.inserted_id)
 
         if inserted_id:
             return {

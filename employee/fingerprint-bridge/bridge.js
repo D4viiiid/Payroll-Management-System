@@ -241,12 +241,33 @@ const initUSBMonitoring = () => {
 
 /**
  * Execute Python script and return JSON result
+ * ✅ CRITICAL FIX: Use absolute Python path for Windows Service compatibility
  */
 const executePython = (scriptPath, args = []) => {
   return new Promise((resolve, reject) => {
-    console.log(`🐍 Executing: python ${scriptPath} ${args.join(' ')}`);
+    // ✅ FIX: Try multiple Python paths (same logic as checkDeviceConnection)
+    const pythonPaths = [
+      'C:\\Python313\\python.exe',  // Direct installation path
+      'C:\\Python312\\python.exe',
+      'C:\\Python311\\python.exe',
+      'C:\\Python310\\python.exe',
+      'C:\\Python39\\python.exe',
+      'python'  // Fallback to PATH
+    ];
     
-    const python = spawn('python', [scriptPath, ...args]);
+    let pythonPath = 'python';
+    
+    // Try to find Python executable
+    for (const path of pythonPaths) {
+      if (path === 'python' || fs.existsSync(path)) {
+        pythonPath = path;
+        break;
+      }
+    }
+    
+    console.log(`🐍 Executing: ${pythonPath} ${scriptPath} ${args.join(' ')}`);
+    
+    const python = spawn(pythonPath, [scriptPath, ...args]);
     
     let stdout = '';
     let stderr = '';

@@ -139,7 +139,7 @@ def capture_and_record_attendance():
                 "error": "Fingerprint capture timeout - no finger detected within 25 seconds"
             }
 
-        # ✅ FIX: Use pyzkfp's DB matching instead of exact comparison
+        # ✅ FIX: Use pyzkfp's DB matching API correctly
         # Get all enrolled employees
         employees_collection = db.employees
         enrolled_employees = list(employees_collection.find({
@@ -155,62 +155,77 @@ def capture_and_record_attendance():
                 "error": "No enrolled employees found in database"
             }
 
-        # Build template database for matching
-        template_list = []
-        employee_list = []
-        
-        for emp in enrolled_employees:
-            try:
-                # Decode stored template from base64
-                stored_template = base64.b64decode(emp['fingerprintTemplate'])
-                template_list.append(stored_template)
-                employee_list.append(emp)
-            except Exception as e:
-                print(f"Error decoding template for {emp.get('employeeId')}: {e}", file=sys.stderr)
-                continue
+        # Initialize fingerprint database for 1-to-N matching
+        employee = None
+        try:
+            # Step 1: Initialize the fingerprint database cache
+            zkfp2.DBInit()
+            print(f"✅ Fingerprint database initialized", file=sys.stderr)
 
-        if not template_list:
+            # Step 2: Add all enrolled templates to the database
+            employee_map = {}  # Map fingerprint ID to employee
+            for idx, emp in enumerate(enrolled_employees):
+                try:
+                    stored_template = base64.b64decode(emp['fingerprintTemplate'])
+                    fid = idx  # Use index as fingerprint ID
+                    zkfp2.DBAdd(fid, stored_template)
+                    employee_map[fid] = emp
+                    print(f"  Added {emp.get('employeeId')} (fid={fid})", file=sys.stderr)
+                except Exception as e:
+                    print(f"⚠️ Error adding {emp.get('employeeId')}: {e}", file=sys.stderr)
+                    continue
+
+            if not employee_map:
+                zkfp2.DBFree()
+                zkfp2.Terminate()
+                return {
+                    "success": False,
+                    "error": "No valid fingerprint templates found"
+                }
+
+            # Step 3: Perform 1-to-N matching
+            print(f"🔍 Performing 1-to-N fingerprint matching...", file=sys.stderr)
+            match_result = zkfp2.DBIdentify(captured_template)
+            
+            # DBIdentify returns [fid, score]
+            matched_fid = match_result[0]
+            match_score = match_result[1]
+
+            print(f"Match result: fid={matched_fid}, score={match_score}", file=sys.stderr)
+
+            if matched_fid in employee_map:
+                employee = employee_map[matched_fid]
+                print(f"✅ Matched: {employee.get('employeeId')} - {employee.get('firstName')} {employee.get('lastName')} (score={match_score})", file=sys.stderr)
+            else:
+                print(f"❌ No match found (fid={matched_fid} not in database)", file=sys.stderr)
+                zkfp2.DBFree()
+                zkfp2.Terminate()
+                return {
+                    "success": False,
+                    "error": "Fingerprint not recognized - please enroll first or contact administrator"
+                }
+
+            # Step 4: Clean up
+            zkfp2.DBFree()
+            zkfp2.Terminate()
+
+        except Exception as e:
+            print(f"❌ Fingerprint matching error: {e}", file=sys.stderr)
+            try:
+                zkfp2.DBFree()
+            except:
+                pass
             zkfp2.Terminate()
             return {
                 "success": False,
-                "error": "No valid fingerprint templates found"
+                "error": f"Fingerprint matching failed: {str(e)}"
             }
 
-        # Use DB1toN matching (1-to-many matching)
-        try:
-            # DBMatch compares captured template against template database
-            match_result = zkfp2.DBMatch(captured_template, template_list)
-            
-            zkfp2.Terminate()  # Now we can terminate
-            
-            if match_result >= 0:
-                # Match found at index match_result
-                employee = employee_list[match_result]
-            else:
-                return {
-                    "success": False,
-                    "error": "Fingerprint not recognized - please try again or contact administrator"
-                }
-        except Exception as e:
-            zkfp2.Terminate()
-            # If DBMatch fails (SIMPLE not implemented), fall back to exact match as last resort
-            print(f"DBMatch failed: {e}, trying fallback matching...", file=sys.stderr)
-            
-            matched_employee = None
-            for idx, stored_template in enumerate(template_list):
-                # Fallback: Check if templates are similar enough (this is NOT ideal!)
-                # This won't work well but better than nothing
-                if stored_template == captured_template:
-                    matched_employee = employee_list[idx]
-                    break
-            
-            if not matched_employee:
-                return {
-                    "success": False,
-                    "error": f"Fingerprint matching failed: {str(e)}"
-                }
-            
-            employee = matched_employee
+        if not employee:
+            return {
+                "success": False,
+                "error": "Fingerprint not recognized - please enroll first or contact administrator"
+            }
 
         # Determine Time In or Time Out based on last attendance
         attendance_collection = db.attendances
@@ -379,10 +394,7 @@ def capture_and_login():
                 "error": "Fingerprint capture timeout - no finger detected within 25 seconds"
             }
 
-        # DON'T terminate device yet - need it for DBMatch!
-        # zkfp2.Terminate()  # ← Moved to after matching
-
-        # Look up employee by fingerprint template
+        # Look up employee by fingerprint using DB matching
         employees_collection = db.employees
         enrolled_employees = list(employees_collection.find({
             "fingerprintEnrolled": True,
@@ -397,56 +409,69 @@ def capture_and_login():
                 "error": "No enrolled employees found in database"
             }
 
-        # Build template database for DBMatch
-        template_list = []
-        employee_list = []
-        for emp in enrolled_employees:
-            try:
-                stored_template = base64.b64decode(emp['fingerprintTemplate'])
-                template_list.append(stored_template)
-                employee_list.append(emp)
-            except Exception as e:
-                print(f"Error decoding template for {emp.get('employeeId')}: {e}", file=sys.stderr)
-                continue
-
-        if not template_list:
-            zkfp2.Terminate()
-            return {
-                "success": False,
-                "error": "No valid fingerprint templates found"
-            }
-
-        # Use DBMatch for fuzzy fingerprint matching (1-to-many)
+        # Use ZKFP2 DB matching for login
         employee = None
         try:
-            match_result = zkfp2.DBMatch(captured_template, template_list)
-            zkfp2.Terminate()  # Now safe to terminate
+            # Initialize fingerprint database
+            zkfp2.DBInit()
+            print(f"✅ Login: Fingerprint database initialized", file=sys.stderr)
 
-            if match_result >= 0:
-                # Found match at index match_result
-                employee = employee_list[match_result]
-                print(f"✅ Fingerprint matched: {employee.get('employeeId')} - {employee.get('firstName')} {employee.get('lastName')}", file=sys.stderr)
+            # Add all enrolled templates
+            employee_map = {}
+            for idx, emp in enumerate(enrolled_employees):
+                try:
+                    stored_template = base64.b64decode(emp['fingerprintTemplate'])
+                    fid = idx
+                    zkfp2.DBAdd(fid, stored_template)
+                    employee_map[fid] = emp
+                    print(f"  Added {emp.get('employeeId')} (fid={fid})", file=sys.stderr)
+                except Exception as e:
+                    print(f"⚠️ Error adding {emp.get('employeeId')}: {e}", file=sys.stderr)
+                    continue
+
+            if not employee_map:
+                zkfp2.DBFree()
+                zkfp2.Terminate()
+                return {
+                    "success": False,
+                    "error": "No valid fingerprint templates found"
+                }
+
+            # Perform 1-to-N matching
+            print(f"🔍 Login: Performing fingerprint matching...", file=sys.stderr)
+            match_result = zkfp2.DBIdentify(captured_template)
+            
+            matched_fid = match_result[0]
+            match_score = match_result[1]
+
+            print(f"Login match result: fid={matched_fid}, score={match_score}", file=sys.stderr)
+
+            if matched_fid in employee_map:
+                employee = employee_map[matched_fid]
+                print(f"✅ Login matched: {employee.get('employeeId')} (score={match_score})", file=sys.stderr)
             else:
+                zkfp2.DBFree()
+                zkfp2.Terminate()
                 return {
                     "success": False,
                     "error": "Fingerprint not recognized - please enroll first or contact administrator"
                 }
 
-        except Exception as e:
+            # Clean up
+            zkfp2.DBFree()
             zkfp2.Terminate()
-            print(f"⚠️ DBMatch failed: {e}, trying fallback exact match...", file=sys.stderr)
 
-            # Fallback: Try exact byte comparison (may not work well for fingerprints)
-            for emp in employee_list:
-                try:
-                    stored_template = base64.b64decode(emp['fingerprintTemplate'])
-                    if stored_template == captured_template:
-                        employee = emp
-                        print(f"✅ Fingerprint matched (fallback): {employee.get('employeeId')}", file=sys.stderr)
-                        break
-                except Exception as decode_error:
-                    print(f"Decode error during fallback: {decode_error}", file=sys.stderr)
-                    continue
+        except Exception as e:
+            print(f"❌ Login fingerprint matching error: {e}", file=sys.stderr)
+            try:
+                zkfp2.DBFree()
+            except:
+                pass
+            zkfp2.Terminate()
+            return {
+                "success": False,
+                "error": f"Biometric login failed: {str(e)}"
+            }
 
         if not employee:
             return {

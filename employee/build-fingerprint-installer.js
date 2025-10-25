@@ -127,6 +127,29 @@ dnspython>=2.3.0
 archive.append(requirementsTxt, { name: 'fingerprint-bridge/requirements.txt' });
 console.log('   ✓ requirements.txt (Python dependencies)');
 
+// ✅ NEW: Add config.env template
+const configEnvTemplate = `# Configuration file for Fingerprint Bridge Server
+# ✅ CRITICAL: This file contains MongoDB connection settings
+# 
+# IMPORTANT: Copy this file to 'config.env' (remove .example extension)
+# and update with your actual MongoDB connection string
+#
+# For cloud MongoDB (MongoDB Atlas):
+# MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/employee_db?retryWrites=true&w=majority
+#
+# For local MongoDB:
+# MONGODB_URI=mongodb://localhost:27017/employee_db
+#
+# Replace with your actual MongoDB connection string:
+
+MONGODB_URI=mongodb+srv://admin1:admin1111@cluster0.noevrrs.mongodb.net/employee_db?retryWrites=true&w=majority&appName=Cluster0
+
+# ✅ DO NOT commit actual credentials to version control!
+# This template is for installation reference only.
+`;
+archive.append(configEnvTemplate, { name: 'fingerprint-bridge/config.env.example' });
+console.log('   ✓ config.env.example (MongoDB configuration template)');
+
 // Add installation guide
 const installGuide = `
 ╔════════════════════════════════════════════════════════════════════════════╗

@@ -31,14 +31,41 @@
 
 // ✅ Load environment variables from config.env
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../payroll-backend/config.env') });
+const fs = require('fs');
+
+// ✅ CRITICAL FIX: Try multiple config.env locations (installed vs development)
+const configPaths = [
+  path.join(__dirname, 'config.env'),                    // Installed bridge (same directory)
+  path.join(__dirname, '../payroll-backend/config.env')  // Development workspace
+];
+
+let configLoaded = false;
+for (const configPath of configPaths) {
+  if (fs.existsSync(configPath)) {
+    console.log(`📁 Loading config from: ${configPath}`);
+    require('dotenv').config({ path: configPath });
+    configLoaded = true;
+    // Verify MongoDB URI was loaded
+    console.log(`🔍 MongoDB URI loaded: ${process.env.MONGODB_URI ? 'YES ✅' : 'NO ❌'}`);
+    if (process.env.MONGODB_URI) {
+      console.log(`   Connection string: ${process.env.MONGODB_URI.substring(0, 50)}...`);
+    }
+    break;
+  }
+}
+
+if (!configLoaded) {
+  console.warn('⚠️  No config.env found. Create one with MONGODB_URI setting.');
+  console.warn('   Checked locations:');
+  configPaths.forEach(p => console.warn(`   - ${p}`));
+}
 
 const express = require('express');
 const https = require('https');
 const http = require('http');
 const cors = require('cors');
 const { spawn } = require('child_process');
-const fs = require('fs');
+// ✅ fs already declared above for config loading
 
 // USB Device Auto-Detection
 let usbDetection;

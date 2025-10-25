@@ -120,18 +120,33 @@ echo.
 
 REM [6/6] Verify MongoDB URI configuration
 echo [6/6] Verifying MongoDB configuration...
-set CONFIG_FILE=..\payroll-backend\config.env
-if exist "%CONFIG_FILE%" (
-    findstr /C:"MONGODB_URI=mongodb" "%CONFIG_FILE%" >nul
-    if errorlevel 1 (
-        echo       ⚠️  MongoDB URI not configured in config.env
-        echo       🔧 FIX: Add MONGODB_URI to %CONFIG_FILE%
-    ) else (
-        echo       ✅ MongoDB URI configured in config.env
-    )
+REM Check in current directory first (installed location)
+if exist "config.env" (
+    set CONFIG_FILE=config.env
+    echo       ✅ Found config.env in current directory
+) else if exist "..\payroll-backend\config.env" (
+    set CONFIG_FILE=..\payroll-backend\config.env
+    echo       ✅ Found config.env in payroll-backend
 ) else (
-    echo       ⚠️  Configuration file not found: %CONFIG_FILE%
+    echo       ❌ config.env not found!
     echo       🔧 FIX: Create config.env with MONGODB_URI setting
+    echo.
+    echo       Example config.env:
+    echo       MONGODB_URI=mongodb+srv://admin1:admin1111@cluster0.noevrrs.mongodb.net/employee_db?retryWrites=true^&w=majority^&appName=Cluster0
+    echo.
+    pause
+    exit /b 1
+)
+
+REM Verify MONGODB_URI is set
+findstr /C:"MONGODB_URI=mongodb" "%CONFIG_FILE%" >nul
+if errorlevel 1 (
+    echo       ⚠️  MongoDB URI not configured in %CONFIG_FILE%
+    echo       🔧 FIX: Add MONGODB_URI to %CONFIG_FILE%
+    pause
+    exit /b 1
+) else (
+    echo       ✅ MongoDB URI configured
 )
 echo.
 

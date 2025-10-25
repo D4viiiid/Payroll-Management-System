@@ -154,6 +154,26 @@ if %errorLevel% equ 0 (
 )
 
 echo.
+echo [5.6/6] Setting up MongoDB configuration...
+if not exist "config.env" (
+    if exist "config.env.example" (
+        echo Creating config.env from template...
+        copy config.env.example config.env >nul
+        echo ✅ config.env created from template
+        echo.
+        echo ⚠️  IMPORTANT: Edit config.env and update MONGODB_URI if needed!
+        echo    Default connection string is already configured.
+    ) else (
+        echo ⚠️  config.env.example not found
+        echo    Creating basic config.env...
+        echo MONGODB_URI=mongodb+srv://admin1:admin1111@cluster0.noevrrs.mongodb.net/employee_db?retryWrites=true^&w=majority^&appName=Cluster0 > config.env
+        echo ✅ Basic config.env created
+    )
+) else (
+    echo ✅ config.env already exists
+)
+
+echo.
 echo [6/6] Creating Windows Service...
 echo Running from directory: %CD%
 node install-service.js

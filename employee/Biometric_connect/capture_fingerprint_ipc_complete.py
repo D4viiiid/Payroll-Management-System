@@ -88,11 +88,11 @@ def capture_and_record_attendance():
     """Capture fingerprint and directly record attendance in database"""
     try:
         # First, connect to database
-        db, connection_error = get_database_connection()
-        if connection_error:
+        db, client = get_database_connection()
+        if db is None:  # ✅ FIX: Check if db is None (connection failed)
             return {
                 "success": False,
-                "error": f"Database connection failed: {connection_error}"
+                "error": f"Database connection failed: {client}"  # client contains error message
             }
 
         # Initialize ZKTeco device
@@ -274,11 +274,11 @@ def capture_and_login():
     """Capture fingerprint and lookup employee for login (IPC)"""
     try:
         # First, connect to database
-        db, connection_error = get_database_connection()
-        if connection_error:
+        db, client = get_database_connection()
+        if db is None:  # ✅ FIX: Check if db is None (connection failed)
             return {
                 "success": False,
-                "error": f"Database connection failed: {connection_error}"
+                "error": f"Database connection failed: {client}"  # client contains error message
             }
 
         # Initialize ZKTeco device

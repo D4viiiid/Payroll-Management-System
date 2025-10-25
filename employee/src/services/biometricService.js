@@ -242,35 +242,9 @@ class BiometricService {
       }
 
       const response = await axios.post(`${bridgeUrl}/attendance/record`);
-      
-      // ✅ FIX BUG #14: Check if backend returned success=false with error message
-      if (response.data && response.data.success === false && response.data.error) {
-        // Backend returned an error (e.g., "Attendance already completed")
-        // Return the error in the same format so frontend can display it
-        return {
-          success: false,
-          message: response.data.error, // ✅ Use backend error message
-          error: response.data.error
-        };
-      }
-      
       return response.data;
     } catch (error) {
       console.error('❌ Attendance recording failed:', error);
-      
-      // ✅ FIX BUG #14: Extract backend error message from axios error
-      if (error.response && error.response.data) {
-        const errorData = error.response.data;
-        if (errorData.error) {
-          // Backend returned {"success": false, "error": "..."}
-          return {
-            success: false,
-            message: errorData.error,
-            error: errorData.error
-          };
-        }
-      }
-      
       throw error;
     }
   }

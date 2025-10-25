@@ -318,27 +318,31 @@ const executePython = (scriptPath, args = [], timeout = 60000) => {
       console.log(`📊 stdout length: ${stdout.length} bytes`);
       console.log(`📊 stderr length: ${stderr.length} bytes`);
       
-      if (code === 0) {
-        try {
-          // Try to parse as JSON
-          const result = JSON.parse(stdout);
-          resolve(result);
-        } catch (e) {
+      // ✅ FIX: Always try to parse JSON from stdout first, regardless of exit code
+      // Python script returns JSON with success:false on failure, not just error text
+      try {
+        const result = JSON.parse(stdout);
+        // Return the parsed JSON result (resolve even if success:false)
+        resolve(result);
+      } catch (e) {
+        // If JSON parsing fails, check exit code
+        if (code === 0) {
           console.error('❌ Failed to parse JSON output:', e.message);
           console.error('📋 Raw output:', stdout);
-          // If not JSON, return as plain text
+          // If not JSON but code 0, return as plain text
           resolve({
             success: true,
             data: stdout,
             raw: true
           });
+        } else {
+          // If JSON parsing fails AND exit code is error, reject with stderr/stdout
+          reject({
+            success: false,
+            error: stderr || stdout || 'Script execution failed',
+            code: code
+          });
         }
-      } else {
-        reject({
-          success: false,
-          error: stderr || stdout || 'Script execution failed',
-          code: code
-        });
       }
     });
     

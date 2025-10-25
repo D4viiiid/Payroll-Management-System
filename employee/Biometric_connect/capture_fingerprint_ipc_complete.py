@@ -291,8 +291,12 @@ def capture_and_record_attendance():
             inserted_id = str(last_attendance["_id"])
             
         else:
-            # Already has Time In AND Time Out today - this is a new Time In
-            status = "Time In"
+            # Already has BOTH Time In AND Time Out today
+            # DENY: Only ONE Time In/Out cycle allowed per day!
+            return {
+                "success": False,
+                "error": f"Attendance already completed for today. {employee['firstName']} {employee['lastName']} has already timed in at {last_attendance['timeIn'].strftime('%I:%M %p')} and timed out at {last_attendance['timeOut'].strftime('%I:%M %p')}. Multiple attendance records per day are not allowed."
+            }
             attendance_record = {
                 "employeeId": employee["employeeId"],
                 "employeeName": f"{employee['firstName']} {employee['lastName']}",

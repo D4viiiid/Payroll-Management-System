@@ -268,7 +268,8 @@ def capture_and_record_attendance():
                 "message": f"Attendance recorded successfully ({status})",
                 "employee": {
                     "employeeId": employee["employeeId"],
-                    "name": f"{employee['firstName']} {employee['lastName']}",
+                    "firstName": employee.get("firstName", ""),
+                    "lastName": employee.get("lastName", ""),
                     "position": employee.get("position", "N/A")
                 },
                 "attendance": {

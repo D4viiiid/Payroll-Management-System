@@ -5,6 +5,7 @@ import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import { optimizedMemo } from '../utils/reactOptimization';
 import { logger } from '../utils/logger';
+import biometricService from '../services/biometricService'; // ✅ Import bridge service
 import './Admin.responsive.css';
 
 // Memoized Employee Row Component for better performance
@@ -180,56 +181,44 @@ const handleFingerprintEnrollment = async () => {
   setFingerprintStep(0);
   
   try {
-    logger.log('🔍 Testing biometric device connection...');
+    logger.log('🔍 Testing biometric bridge connection...');
     
-    // Test device connection first
-    const healthCheck = await fetch('/api/biometric-integrated/device/health');
+    // ✅ FIX: Use biometricService to check bridge health directly
+    const bridgeHealthy = await biometricService.checkBridgeHealth();
+    logger.log('✅ Bridge status:', bridgeHealthy);
     
-    if (!healthCheck.ok) {
-      throw new Error('Biometric device not connected');
-    }
-    
-    const healthData = await healthCheck.json();
-    logger.log('✅ Device status:', healthData);
-    
-    if (!healthData.success || !healthData.connected) {
-      throw new Error('Biometric device not available');
+    if (!bridgeHealthy) {
+      throw new Error('Biometric device not available. Please ensure:\n1. Fingerprint bridge is running (START_BRIDGE.bat)\n2. ZKTeco scanner is connected');
     }
 
     // Alert user to prepare for fingerprint scan
     alert('📱 Device ready! Place your finger on the scanner when prompted.\n\nYou will need to scan 3 times. Wait for the green light between scans.');
     
     setFingerprintStep(1); // Show scanning status
-    logger.log('👆 Starting fingerprint capture...');
+    logger.log('👆 Starting fingerprint enrollment...');
     
-    // Call pre-enroll endpoint to capture fingerprint BEFORE creating employee
-    const enrollResponse = await fetch('/api/biometric-integrated/pre-enroll', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (!enrollResponse.ok) {
-      throw new Error('Fingerprint capture failed');
-    }
-    
-    const enrollResult = await enrollResponse.json();
-    logger.log('📸 Fingerprint capture result:', enrollResult);
-    
-    if (!enrollResult.success) {
-      throw new Error(enrollResult.message || 'Failed to capture fingerprint');
-    }
-    
-    // Store the captured template in state
-    setCapturedFingerprintTemplate(enrollResult.template);
-    logger.log('💾 Fingerprint template stored in state (length:', enrollResult.templateLength, ')');
-
-    // Generate employee credentials AFTER successful fingerprint capture
-    logger.log('🔑 Generating employee credentials...');
+    // ✅ FIX: Generate credentials FIRST before enrollment
     const generatedEmployeeId = generateEmployeeId();
     const generatedPassword = generatePassword();
     
+    // ✅ FIX: Use bridge service to enroll fingerprint with temporary employee data
+    const enrollResult = await biometricService.enrollEmployee({
+      _id: generatedEmployeeId,
+      firstName: formData.firstName || 'New',
+      lastName: formData.lastName || 'Employee',
+      email: formData.email || `${generatedEmployeeId}@temp.com`
+    });
+    
+    logger.log('📸 Fingerprint enrollment result:', enrollResult);
+    
+    if (!enrollResult.success) {
+      throw new Error(enrollResult.message || enrollResult.error || 'Failed to enroll fingerprint');
+    }
+    
+    // Store the captured template in state
+    setCapturedFingerprintTemplate(enrollResult.template || enrollResult.fingerprintTemplate);
+    logger.log('� Fingerprint template stored in state');
+
     // Update form data with generated credentials and mark for fingerprint enrollment
     setFormData(prev => ({
       ...prev,
@@ -242,7 +231,7 @@ const handleFingerprintEnrollment = async () => {
     
     setFingerprintStep(2); // Success
     logger.log('✅ Fingerprint captured and credentials generated!');
-    alert('✅ Fingerprint captured successfully! You can now fill in the employee details and click "Add Employee".');
+    alert('✅ Fingerprint enrolled successfully!\n\nEmployee ID: ' + generatedEmployeeId + '\nPassword: ' + generatedPassword + '\n\nPlease fill in the remaining employee details and click "Add Employee".');
     
     // Auto-hide success message
     setTimeout(() => {
@@ -256,10 +245,10 @@ const handleFingerprintEnrollment = async () => {
     // Clear any stored template on error
     setCapturedFingerprintTemplate(null);
     
-    let userMessage = error.message;
+    let userMessage = error.message || 'Unknown error';
     
-    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-      userMessage = 'Cannot connect to fingerprint service. Please make sure the biometric device is connected and the backend server is running.';
+    if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('Bridge server not available'))) {
+      userMessage = 'Cannot connect to fingerprint bridge. Please make sure:\n1. Fingerprint bridge is running (START_BRIDGE.bat)\n2. ZKTeco scanner is connected\n3. Bridge is accessible at https://localhost:3003';
     }
     
     alert('❌ Fingerprint Enrollment Failed:\n' + userMessage);

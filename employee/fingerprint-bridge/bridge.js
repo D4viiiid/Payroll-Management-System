@@ -66,7 +66,7 @@ const PYTHON_SCRIPT_DIR_DEV = path.join(__dirname, '../Biometric_connect');
 const PYTHON_SCRIPT_DIR_PROD = path.join(__dirname, 'Biometric_connect');
 const PYTHON_SCRIPT_DIR = fs.existsSync(PYTHON_SCRIPT_DIR_PROD) ? PYTHON_SCRIPT_DIR_PROD : PYTHON_SCRIPT_DIR_DEV;
 const CAPTURE_SCRIPT = path.join(PYTHON_SCRIPT_DIR, 'capture_fingerprint_ipc_complete.py');
-const ENROLLMENT_SCRIPT = path.join(PYTHON_SCRIPT_DIR, 'main.py');
+const ENROLLMENT_SCRIPT = path.join(PYTHON_SCRIPT_DIR, 'enroll_fingerprint_cli.py'); // ✅ Use CLI version instead of GUI
 
 // Device status tracking
 let deviceConnected = false;
@@ -519,10 +519,12 @@ app.post('/api/fingerprint/login', async (req, res) => {
  * 
  * Body: { employeeId, firstName, lastName, email }
  * ✅ FIX: Better error handling and device validation
+ * ✅ FIX: Now uses CLI enrollment script instead of GUI
  */
 app.post('/api/fingerprint/enroll', async (req, res) => {
   try {
     console.log('\n📝 === FINGERPRINT ENROLLMENT REQUEST ===');
+    console.log('📋 Timestamp:', new Date().toISOString());
     
     const { employeeId, firstName, lastName, email } = req.body;
     
@@ -534,6 +536,7 @@ app.post('/api/fingerprint/enroll', async (req, res) => {
     }
     
     console.log(`📋 Employee: ${firstName} ${lastName} (ID: ${employeeId})`);
+    console.log('📋 Email:', email || 'N/A');
     console.log('📋 Enrollment Script:', ENROLLMENT_SCRIPT);
     console.log('📋 Script exists:', fs.existsSync(ENROLLMENT_SCRIPT));
     
@@ -553,20 +556,23 @@ app.post('/api/fingerprint/enroll', async (req, res) => {
     
     console.log('✅ Device check passed - starting enrollment...');
     
-    // Pass employee data as JSON argument to Python script
+    // Pass employee data as JSON argument to Python CLI script
     const employeeData = JSON.stringify({
       _id: employeeId,
+      employeeId: employeeId,
       firstName,
       lastName,
       email
     });
     
+    console.log('🐍 Executing enrollment script with employee data...');
     const result = await executePython(ENROLLMENT_SCRIPT, ['--data', employeeData]);
     
     if (result.success) {
       console.log('✅ Fingerprint enrollment completed successfully');
+      console.log('📋 Template length:', result.templateLength || 'N/A');
     } else {
-      console.error('❌ Enrollment failed:', result.error);
+      console.error('❌ Enrollment failed:', result.error || result.message);
     }
     
     res.json(result);

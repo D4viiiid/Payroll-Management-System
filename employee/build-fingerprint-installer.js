@@ -94,6 +94,7 @@ filesToInclude.forEach(file => {
 const BIOMETRIC_DIR = path.join(__dirname, 'Biometric_connect');
 const pythonScriptsToInclude = [
   'capture_fingerprint_ipc_complete.py',
+  'enroll_fingerprint_cli.py', // ✅ NEW: CLI enrollment script
   'main.py',
   '__init__.py'
 ];

@@ -237,32 +237,82 @@ def capture_and_record_attendance():
         # Determine Time In or Time Out based on last attendance
         attendance_collection = db.attendances
 
-        # Find last attendance record for this employee
+        # Get today's date (date only, no time)
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Find last attendance record for this employee TODAY
         last_attendance = attendance_collection.find_one(
-            {"employeeId": employee["employeeId"]},
-            sort=[("time", -1)]
+            {
+                "employeeId": employee["employeeId"],
+                "date": today
+            },
+            sort=[("_id", -1)]
         )
 
-        # Determine status
-        if not last_attendance or last_attendance.get("status") == "Time Out":
+        current_time = datetime.utcnow()
+        
+        # Determine if this is Time In or Time Out
+        if not last_attendance:
+            # No attendance today - this is Time In
             status = "Time In"
-        else:
+            attendance_record = {
+                "employeeId": employee["employeeId"],
+                "employeeName": f"{employee['firstName']} {employee['lastName']}",
+                "date": today,
+                "timeIn": current_time,
+                "timeOut": None,
+                "status": "present",
+                "timeInStatus": None,  # Will be calculated by backend
+                "dayType": None,  # Will be calculated by backend
+                "deviceType": "biometric",
+                "location": "Main Office",
+                "archived": False,
+                "time": current_time  # Keep for compatibility
+            }
+            
+            # Insert new attendance record
+            result = attendance_collection.insert_one(attendance_record)
+            inserted_id = str(result.inserted_id)
+            
+        elif last_attendance.get("timeOut") is None:
+            # Has Time In but no Time Out - this is Time Out
             status = "Time Out"
+            
+            # Update existing record with Time Out
+            result = attendance_collection.update_one(
+                {"_id": last_attendance["_id"]},
+                {
+                    "$set": {
+                        "timeOut": current_time,
+                        "time": current_time  # Update time to Time Out time
+                    }
+                }
+            )
+            inserted_id = str(last_attendance["_id"])
+            
+        else:
+            # Already has Time In AND Time Out today - this is a new Time In
+            status = "Time In"
+            attendance_record = {
+                "employeeId": employee["employeeId"],
+                "employeeName": f"{employee['firstName']} {employee['lastName']}",
+                "date": today,
+                "timeIn": current_time,
+                "timeOut": None,
+                "status": "present",
+                "timeInStatus": None,
+                "dayType": None,
+                "deviceType": "biometric",
+                "location": "Main Office",
+                "archived": False,
+                "time": current_time
+            }
+            
+            # Insert new attendance record
+            result = attendance_collection.insert_one(attendance_record)
+            inserted_id = str(result.inserted_id)
 
-        # Create attendance record
-        attendance_record = {
-            "employeeId": employee["employeeId"],
-            "employeeName": f"{employee['firstName']} {employee['lastName']}",
-            "time": datetime.utcnow(),
-            "status": status,
-            "deviceType": "biometric",
-            "location": "Main Office"
-        }
-
-        # Insert attendance record
-        result = attendance_collection.insert_one(attendance_record)
-
-        if result.inserted_id:
+        if inserted_id:
             return {
                 "success": True,
                 "message": f"Attendance recorded successfully ({status})",
@@ -274,8 +324,8 @@ def capture_and_record_attendance():
                 },
                 "attendance": {
                     "status": status,
-                    "time": attendance_record["time"].isoformat(),
-                    "id": str(result.inserted_id)
+                    "time": current_time.isoformat(),
+                    "id": inserted_id
                 }
             }
         else:

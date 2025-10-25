@@ -659,7 +659,10 @@ app.post('/api/attendance/record', async (req, res) => {
     
     if (result.success) {
       console.log('✅ Attendance recorded successfully');
-      console.log('📋 Employee:', result.employee?.name || 'N/A');
+      const employeeName = result.employee?.firstName && result.employee?.lastName 
+        ? `${result.employee.firstName} ${result.employee.lastName}`
+        : 'N/A';
+      console.log('📋 Employee:', employeeName);
       console.log('📋 Status:', result.attendance?.status || 'N/A');
     } else {
       console.error('❌ Python script returned error:', result.error);

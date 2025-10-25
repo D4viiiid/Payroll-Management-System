@@ -297,22 +297,6 @@ def capture_and_record_attendance():
                 "success": False,
                 "error": f"Attendance already completed for today. {employee['firstName']} {employee['lastName']} has already timed in at {last_attendance['timeIn'].strftime('%I:%M %p')} and timed out at {last_attendance['timeOut'].strftime('%I:%M %p')}. Multiple attendance records per day are not allowed."
             }
-            attendance_record = {
-                "employeeId": employee["employeeId"],
-                "employeeName": f"{employee['firstName']} {employee['lastName']}",
-                "date": today,
-                "timeIn": current_time,
-                "timeOut": None,
-                "status": "present",
-                "timeInStatus": None,
-                "dayType": None,
-                "deviceType": "biometric",
-                "location": "Main Office",
-                "archived": False,
-                "time": current_time
-            }
-            
-            # Insert new attendance record
             result = attendance_collection.insert_one(attendance_record)
             inserted_id = str(result.inserted_id)
 

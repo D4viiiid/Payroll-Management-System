@@ -359,23 +359,23 @@ router.get('/attendance/stats', async (req, res) => {
             totalEmployees = localEmployeeStorage.count();
         }
 
-        // ✅ CRITICAL FIX ISSUE #1: Redefine statistics calculation based on user requirements
-        // User Requirements from screenshots and description:
-        // - Total Present: ALL employees who timed in today (with OR without time out)
+        // ✅ CRITICAL FIX BUG #13: Redefine "Total Present" logic
+        // User Requirements based on testing feedback:
+        // - Total Present: Employees who timed in BUT have NOT timed out yet (currently present)
         // - Full Day: Timed in AND timed out AND worked >= 6.5 hours (including OT)
         // - Half Day: Timed in AND timed out AND worked 4 to <6.5 hours
         // - Invalid: Timed in AND timed out AND worked < 4 hours
-        // - Absent: Did NOT time in today (totalEmployees - totalPresent)
+        // - Absent: Did NOT time in today (totalEmployees - all who timed in)
         
-        let totalPresent = 0;  // All who timed in today (with or without time out)
+        let totalPresent = 0;  // ✅ FIX: Employees with time IN but NO time OUT (currently present)
         let fullDay = 0;       // Completed full day (timed out, >= 6.5 hours)
         let halfDay = 0;       // Partial day (timed out, >= 4 hours, < 6.5 hours)
         let invalid = 0;       // Invalid attendance (timed out, < 4 hours worked)
+        let totalTimedIn = 0;  // Total employees who timed in today (with or without time out)
 
         todayRecords.forEach(record => {
             if (record.timeIn) {
-                // ✅ FIX: Count as present if they have time in (regardless of time out)
-                totalPresent++;
+                totalTimedIn++; // Count everyone who timed in
                 
                 if (record.timeOut) {
                     // Employee has both time in and time out - calculate their day type
@@ -402,42 +402,45 @@ router.get('/attendance/stats', async (req, res) => {
                             invalid++;
                         }
                     }
+                } else {
+                    // ✅ FIX BUG #13: Employee has timeIn but NO timeOut = Currently Present
+                    totalPresent++;
                 }
-                // ✅ NOTE: If employee has timeIn but NO timeOut, they count in totalPresent
-                // but NOT in fullDay, halfDay, or invalid (shift incomplete)
             }
         });
 
-        const absent = totalEmployees - totalPresent;
+        // ✅ FIX: Absent = Total employees - all who timed in (not just present)
+        const absent = totalEmployees - totalTimedIn;
 
         const endTime = Date.now();
         const totalTime = endTime - startTime;
         
-        // 🚨 DEPLOYMENT VERIFICATION v1.0.4 - Stats calculation fix
+        // 🚨 DEPLOYMENT VERIFICATION v1.0.5 - BUG #13 FIX
         console.log('\n' + '🔥'.repeat(50));
-        console.log('🔥 STATS CALCULATION v1.0.4 - CRITICAL FIX DEPLOYED');
+        console.log('🔥 STATS CALCULATION v1.0.5 - BUG #13 FIXED');
+        console.log('🔥 "Total Present" = Employees with Time In but NO Time Out');
         console.log('🔥'.repeat(50));
         console.log(`📊 FINAL STATS:`);
-        console.log(`   Total Present (all who timed in): ${totalPresent}`);
+        console.log(`   Total Present (timed in, NOT out yet): ${totalPresent}`);
         console.log(`   Full Day (completed >= 6.5hrs): ${fullDay}`);
         console.log(`   Half Day (completed 4-6.5hrs): ${halfDay}`);
         console.log(`   Invalid (<4 hrs): ${invalid}`);
-        console.log(`   ✅ Absent (no time in): ${absent} (MUST = totalEmployees if no attendance)`);
+        console.log(`   Total Timed In Today: ${totalTimedIn}`);
+        console.log(`   ✅ Absent (no time in): ${absent}`);
         console.log(`   Total Employees: ${totalEmployees}`);
         console.log(`⚡ Total processing time: ${totalTime}ms`);
-        console.log('🔥 Calculation: absent = totalEmployees - totalPresent');
-        console.log('🔥 Expected: absent=' + totalEmployees + ' (if totalPresent=0)');
+        console.log('🔥 Calculation: absent = totalEmployees - totalTimedIn');
         console.log('🔥 Actual: absent=' + absent);
         console.log('🔥'.repeat(50) + '\n');
 
         res.json({
-            totalPresent,  // All who timed in today (with or without time out)
+            totalPresent,  // ✅ FIX: Employees with Time In but NO Time Out (currently present)
             fullDay,       // Completed full day (>= 6.5 hours)
             halfDay,       // Partial day (>= 4, < 6.5 hours)
             invalid,       // Invalid attendance (< 4 hours)
             absent,        // Did not time in today
-            _version: 'v1.0.4.2-FIXED', // 🚨 DEPLOYMENT VERIFICATION
-            _calculation: `absent = ${totalEmployees} - ${totalPresent} = ${absent}`,
+            _version: 'v1.0.5-BUG13-FIXED', // 🚨 BUG #13 FIX
+            _calculation: `absent = ${totalEmployees} - ${totalTimedIn} = ${absent}`,
             _timestamp: new Date().toISOString()
         });
     } catch (error) {

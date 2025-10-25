@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import apiService, { eventBus, startRealTimeUpdates, stopRealTimeUpdates } from '../services/apiService';
+import biometricService from '../services/biometricService'; // ✅ BUG #15 FIX: Import bridge service
 import BiometricEnrollmentSection from './BiometricEnrollmentSection';
 import FingerprintBridgeStatus from './FingerprintBridgeStatus';
 import { logger } from '../utils/logger';
@@ -173,28 +174,22 @@ const Employees = () => {
   const handleFingerprintEnroll = async (employee) => {
     try {
       setEnrollingEmployee(employee);
-      setEnrollmentStatus('Checking fingerprint service...');
+      setEnrollmentStatus('Checking fingerprint bridge service...');
       
-      // ✅ FIX BUG #15: Use biometricService to call bridge server
-      const biometricService = (await import('../services/biometricService')).default;
-      
-      // Check if bridge server is available
-      const deviceStatus = await biometricService.getDeviceStatus();
-      if (!deviceStatus.connected) {
-        throw new Error('Biometric device not available. Please make sure the Fingerprint Bridge is running and the ZKTeco scanner is connected.');
+      // ✅ BUG #15 FIX: Use biometricService to check bridge instead of backend API
+      const bridgeHealthy = await biometricService.checkBridgeHealth();
+      if (!bridgeHealthy) {
+        throw new Error('Biometric device not available. Please ensure:\n1. Fingerprint bridge is running (START_BRIDGE.bat)\n2. ZKTeco scanner is connected');
       }
       
-      setEnrollmentStatus('Starting fingerprint enrollment via bridge...');
+      setEnrollmentStatus('Starting fingerprint enrollment...');
       
-      // ✅ FIX BUG #15: Call bridge server's enroll endpoint
+      // ✅ BUG #15 FIX: Use bridge service directly instead of backend API
       const result = await biometricService.enrollEmployee({
         _id: employee._id,
         firstName: employee.firstName,
         lastName: employee.lastName,
-        email: employee.email,
-        contactNumber: employee.contactNumber,
-        position: employee.position,
-        employeeId: employee.employeeId
+        email: employee.email
       });
       
       if (result.success) {
@@ -206,14 +201,13 @@ const Employees = () => {
         setEnrollmentStatus('');
         setEnrollingEmployee(null);
       } else {
-        throw new Error(result.message || result.error || 'Fingerprint enrollment failed');
+        throw new Error(result.error || result.message || 'Fingerprint enrollment failed');
       }
       
     } catch (error) {
-      logger.error('Error starting fingerprint enrollment:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-      setEnrollmentStatus('Error: ' + errorMessage);
-      alert('❌ Fingerprint Biometric Failed: ' + errorMessage);
+      logger.error('❌ Fingerprint enrollment error:', error);
+      setEnrollmentStatus('Error: ' + error.message);
+      alert('Fingerprint Biometric Failed: ' + error.message);
       setEnrollingEmployee(null);
     }
   };

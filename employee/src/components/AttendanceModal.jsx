@@ -126,18 +126,13 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
           onClose();
         }, 2000);
       } else {
-        // ✅ FIX BUG #14: Show the actual backend error message
+        // ✅ BUG #14 FIX: Show actual error message from bridge (includes "attendance already completed")
         const errorMessage = data.error || data.message || 'Fingerprint not recognized. Please try again.';
-        toast.error(errorMessage, {
-          autoClose: 5000 // Show error longer so user can read it
-        });
+        toast.error(errorMessage);
       }
     } catch (error) {
       logger.error('Error recording attendance:', error);
-      
-      // ✅ FIX BUG #14: Extract error message from response
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to connect to bridge server';
-      toast.error('Error: ' + errorMessage);
+      toast.error('Error: ' + (error.message || 'Failed to connect to bridge server'));
     } finally {
       setProcessing(false);
     }

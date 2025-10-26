@@ -568,12 +568,18 @@ const handleFingerprintEnrollment = async () => {
     setIsEnrollingFingerprint(true);
     setFingerprintStep(1); // Show scanning status
     logger.log('👆 Starting fingerprint RE-enrollment for existing employee...');
+    logger.log('📋 Employee data:', {
+      _id: editingEmployee._id,
+      employeeId: editingEmployee.employeeId,
+      name: `${editingEmployee.firstName} ${editingEmployee.lastName}`
+    });
     
     try {
-      // ✅ FIX: Use EXISTING employee data (don't generate new credentials)
+      // ✅ FIX BUG #22: Pass actual employeeId (EMP-XXXX), NOT MongoDB _id
+      // Bridge expects employeeId for enrollment, NOT MongoDB ObjectId
       const enrollResult = await biometricService.enrollEmployee({
-        _id: editingEmployee._id,
-        employeeId: editingEmployee.employeeId, // ✅ KEEP existing employee ID
+        _id: editingEmployee.employeeId,        // ✅ Use employeeId as _id for bridge
+        employeeId: editingEmployee.employeeId, // ✅ Actual employee ID (e.g., EMP-6470)
         firstName: editingEmployee.firstName,
         lastName: editingEmployee.lastName,
         email: editingEmployee.email

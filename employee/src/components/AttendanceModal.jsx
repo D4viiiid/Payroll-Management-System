@@ -107,7 +107,9 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
         }
         
         const employeeName = data.employee ? `${data.employee.firstName} ${data.employee.lastName}` : 'Unknown';
-        const timeLabel = data.attendance?.timeOut ? 'Time Out' : 'Time In';
+        // ✅ BUG #20 FIX: Use status field from Python response instead of checking timeOut field
+        // Python returns: data.attendance.status = "Time In" or "Time Out"
+        const timeLabel = data.attendance?.status || 'Time In';
         
         toast.success(`✅ ${timeLabel} recorded for ${employeeName}!`, {
           autoClose: 3000

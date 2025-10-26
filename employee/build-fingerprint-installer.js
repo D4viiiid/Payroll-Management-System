@@ -150,6 +150,30 @@ MONGODB_URI=mongodb+srv://admin1:admin1111@cluster0.noevrrs.mongodb.net/employee
 archive.append(configEnvTemplate, { name: 'fingerprint-bridge/config.env.example' });
 console.log('   ✓ config.env.example (MongoDB configuration template)');
 
+// ✅ NEW: Add ZKFinger SDK folder (contains setup.exe and installation scripts)
+console.log('\n🔧 Adding ZKFinger SDK installer:\n');
+
+const SDK_DIR = path.join(BRIDGE_DIR, 'zkfinger-sdk');
+if (fs.existsSync(SDK_DIR)) {
+  const sdkFiles = ['setup.exe', 'CHECK_SDK_INSTALLATION.ps1', 'INSTALL_ZKFINGER_SDK.bat'];
+  
+  sdkFiles.forEach(file => {
+    const filePath = path.join(SDK_DIR, file);
+    if (fs.existsSync(filePath)) {
+      archive.file(filePath, { name: `fingerprint-bridge/zkfinger-sdk/${file}` });
+      const stats = fs.statSync(filePath);
+      const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
+      console.log(`   ✓ zkfinger-sdk/${file} (${sizeMB} MB)`);
+    } else {
+      console.log(`   ✗ zkfinger-sdk/${file} (not found, skipping)`);
+    }
+  });
+  
+  console.log('\n   📌 ZKFinger SDK will be auto-installed if missing on target system!');
+} else {
+  console.log('   ⚠️  zkfinger-sdk folder not found - SDK auto-install won\'t be available');
+}
+
 // Add installation guide
 const installGuide = `
 ╔════════════════════════════════════════════════════════════════════════════╗
@@ -161,8 +185,13 @@ const installGuide = `
    ✓ Windows 7 or later
    ✓ Node.js v14 or later (Download: https://nodejs.org)
    ✓ Python 3.7+ with pyzkfp library installed
-   ✓ ZKTeco fingerprint scanner (USB)
+   ✓ ZKTeco fingerprint scanner (USB) - Live20R SLK20R
    ✓ Administrator privileges
+   
+   ⚡ NEW: ZKFinger SDK will be auto-installed if not present!
+      - The installer will detect if ZKFinger SDK is missing
+      - SDK will be automatically installed during setup
+      - No manual download from ZKTeco.com required!
 
 📦 INSTALLATION STEPS:
 
@@ -182,8 +211,14 @@ const installGuide = `
    6. Run the installer batch file:
       Right-click "INSTALL_AUTO_SERVICE.bat"
       Select "Run as Administrator"
+   
+   7. ⚡ SDK Auto-Installation (if needed):
+      - Installer will detect if ZKFinger SDK is missing
+      - If missing, it will automatically install SDK
+      - Installation takes 1-2 minutes
+      - No user interaction needed (silent install)
 
-   7. Wait for installation to complete
+   8. Wait for installation to complete
       The service will start automatically
 
 ✅ VERIFICATION:

@@ -52,6 +52,66 @@ python --version
 echo ✅ Python found
 
 echo.
+echo [1.5/6] Checking ZKFinger SDK installation (required for ZKTeco Live20R SLK20R)...
+echo.
+echo The ZKFinger SDK is required for the fingerprint scanner to work properly.
+echo Checking if SDK is already installed on this system...
+echo.
+
+REM Run SDK detection script
+powershell -ExecutionPolicy Bypass -File "%~dp0zkfinger-sdk\CHECK_SDK_INSTALLATION.ps1"
+if %errorLevel% equ 0 (
+    echo.
+    echo ✅ ZKFinger SDK is already installed!
+    echo    Skipping SDK installation step.
+    echo.
+) else (
+    echo.
+    echo ⚠️  ZKFinger SDK is NOT installed!
+    echo.
+    echo The installer will now automatically install the ZKFinger SDK.
+    echo This is required for the ZKTeco Live20R SLK20R fingerprint scanner.
+    echo.
+    echo Installation details:
+    echo   - SDK Version: ZKFinger Standard SDK 5.3.0.33
+    echo   - Size: 12.84 MB
+    echo   - Installation time: 1-2 minutes
+    echo.
+    echo Starting SDK installation...
+    echo.
+    
+    REM Run SDK installer
+    call "%~dp0zkfinger-sdk\INSTALL_ZKFINGER_SDK.bat"
+    
+    if %errorLevel% equ 0 (
+        echo.
+        echo ✅ ZKFinger SDK installed successfully!
+        echo.
+    ) else (
+        echo.
+        echo ❌ ERROR: ZKFinger SDK installation failed!
+        echo.
+        echo ⚠️  WARNING: The fingerprint scanner will NOT work without the SDK.
+        echo.
+        echo You can:
+        echo   1. Continue anyway (fingerprint features won't work)
+        echo   2. Cancel and install SDK manually from ZKTeco.com
+        echo.
+        set /p continue="Continue without SDK? (Y/N): "
+        if /i "%continue%" neq "Y" (
+            echo.
+            echo Installation cancelled. Please install SDK manually and try again.
+            echo.
+            pause
+            exit /b 1
+        )
+        echo.
+        echo ⚠️  Continuing without SDK - fingerprint scanner will NOT work!
+        echo.
+    )
+)
+
+echo.
 echo [2/6] Installing Python dependencies (pyzkfp, pymongo)...
 echo.
 echo Installing critical packages with specific versions...

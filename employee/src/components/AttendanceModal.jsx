@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { toast } from 'react-toastify';
+import { showSuccess, showError, showInfo } from '../utils/toast';
 import { logger } from '../utils/logger.js';
 import biometricService from '../services/biometricService';
 import notifSound from '../assets/notif.mp3';
@@ -83,14 +83,14 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
 
   const handleTimeInOut = async () => {
     if (deviceStatus !== 'connected') {
-      toast.error('Bridge server not connected. Please run START_BRIDGE.bat first.');
+      showError('Bridge server not connected. Please run START_BRIDGE.bat first.');
       return;
     }
 
     try {
       setProcessing(true);
       
-      const toastId = toast.info('👆 Please place your finger on the scanner...', { 
+      const toastId = showInfo('👆 Please place your finger on the scanner...', { 
         autoClose: false,
         closeButton: false
       });
@@ -111,7 +111,7 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
         // Python returns: data.attendance.status = "Time In" or "Time Out"
         const timeLabel = data.attendance?.status || 'Time In';
         
-        toast.success(`✅ ${timeLabel} recorded for ${employeeName}!`, {
+        showSuccess(`✅ ${timeLabel} recorded for ${employeeName}!`, {
           autoClose: 3000
         });
 
@@ -130,11 +130,11 @@ const AttendanceModal = ({ isOpen, onClose, onSuccess }) => {
       } else {
         // ✅ BUG #14 FIX: Show actual error message from bridge (includes "attendance already completed")
         const errorMessage = data.error || data.message || 'Fingerprint not recognized. Please try again.';
-        toast.error(errorMessage);
+        showError(errorMessage);
       }
     } catch (error) {
       logger.error('Error recording attendance:', error);
-      toast.error('Error: ' + (error.message || 'Failed to connect to bridge server'));
+      showError('Error: ' + (error.message || 'Failed to connect to bridge server'));
     } finally {
       setProcessing(false);
     }

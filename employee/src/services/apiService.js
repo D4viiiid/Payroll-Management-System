@@ -1,5 +1,5 @@
 // apiService.js - Centralized API service for all database connections
-import { toast } from 'react-toastify';
+import { showSuccess, showError, showInfo } from '../utils/toast';
 import { logger } from '../utils/logger.js';
 import { requestDeduplicator, createCacheKey } from '../utils/requestDeduplication.js';
 
@@ -39,7 +39,7 @@ const handleApiError = (error, customMessage = 'An error occurred') => {
   const errorMessage = error.message || customMessage;
   // Don't show toast for 404 errors to avoid spam
   if (!errorMessage.includes('404')) {
-    toast.error(errorMessage);
+    showError(errorMessage);
   }
   return { error: errorMessage };
 };
@@ -86,7 +86,7 @@ const fetchApi = async (url, options = {}) => {
       console.warn('🗑️ Cleared authentication data (token, currentEmployee, userRole)');
       
       // Show user-friendly error message
-      toast.error('Session expired. Please login again.', {
+      showError('Session expired. Please login again.', {
         position: 'top-center',
         autoClose: 3000
       });
@@ -480,7 +480,7 @@ export const fingerprintApi = {
       // Check if fingerprint service is available first
       const isServiceAvailable = await fingerprintApi.checkService();
       if (!isServiceAvailable) {
-        toast.error('Fingerprint device not connected');
+        showError('Fingerprint device not connected');
         return { error: 'Fingerprint device not connected' };
       }
 
@@ -492,7 +492,7 @@ export const fingerprintApi = {
       if (!data.error) {
         eventBus.emit('attendance-recorded', data);
         const actionText = data.action === 'time_in' ? 'Time In' : 'Time Out';
-        toast.success(`${actionText} recorded successfully!`);
+        showSuccess(`${actionText} recorded successfully!`);
       }
 
       return data;

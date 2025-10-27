@@ -82,17 +82,19 @@ function App() {
         reverseOrder={false}
         gutter={8}
         toastOptions={{
-          // Default options for all toasts
+          // ✅ CRITICAL FIX: Remove default black background (#363636)
+          // Each toast type will use its own background color
           duration: 4000,
           style: {
-            background: '#363636',
             color: '#fff',
             padding: '16px',
-            borderRadius: '8px',
-            fontSize: '14px',
+            borderRadius: '10px',
+            fontSize: '15px',
             fontWeight: '500',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            maxWidth: '500px',
           },
-          // Success toast styling
+          // Success toast styling - GREEN
           success: {
             duration: 3000,
             iconTheme: {
@@ -101,9 +103,10 @@ function App() {
             },
             style: {
               background: '#10b981',
+              color: '#fff',
             },
           },
-          // Error toast styling
+          // Error toast styling - RED
           error: {
             duration: 5000,
             iconTheme: {
@@ -112,12 +115,18 @@ function App() {
             },
             style: {
               background: '#ef4444',
+              color: '#fff',
             },
           },
-          // Loading toast styling
+          // Loading toast styling - BLUE
           loading: {
+            iconTheme: {
+              primary: '#3b82f6',
+              secondary: '#fff',
+            },
             style: {
               background: '#3b82f6',
+              color: '#fff',
             },
           },
         }}

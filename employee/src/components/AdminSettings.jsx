@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { showSuccess, showError, showInfo } from '../utils/toast';
 import { FaKey, FaUser, FaLock, FaEye, FaEyeSlash, FaShieldAlt } from 'react-icons/fa';
 import AdminSidebar from "./AdminSidebar";
 import AdminHeader from "./AdminHeader";
@@ -103,7 +103,7 @@ const AdminSettings = () => {
     e.preventDefault();
     
     if (!validateForm()) {
-      toast.error('Please fix the errors in the form');
+      showError('Please fix the errors in the form');
       return;
     }
 
@@ -142,13 +142,13 @@ const AdminSettings = () => {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        toast.error(result.message || 'Failed to update credentials');
+        showError(result.message || 'Failed to update credentials');
         setLoading(false);
         return;
       }
 
       // Success
-      toast.success(result.message || 'Credentials updated successfully');
+      showSuccess(result.message || 'Credentials updated successfully');
       
       // Update local storage with new data if username changed
       if (formData.newUsername && result.employee) {
@@ -170,7 +170,7 @@ const AdminSettings = () => {
       // If password or username changed, prompt re-login
       if (formData.newPassword || formData.newUsername) {
         setTimeout(() => {
-          toast.info('Please login again with your new credentials');
+          showInfo('Please login again with your new credentials');
           localStorage.clear();
           window.location.href = '/';
         }, 2000);
@@ -178,7 +178,7 @@ const AdminSettings = () => {
 
     } catch (error) {
       console.error('Error updating credentials:', error);
-      toast.error('Failed to update credentials. Please try again.');
+      showError('Failed to update credentials. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
+import { showError } from '../utils/toast';
 import { FaFingerprint, FaSpinner, FaCheck, FaTimes, FaExclamationTriangle } from 'react-icons/fa';
 
 const BiometricLoginButton = ({ onSuccess, onError }) => {
@@ -38,7 +38,7 @@ const BiometricLoginButton = ({ onSuccess, onError }) => {
 
   const handleBiometricLogin = async () => {
     if (deviceStatus !== 'connected') {
-      toast.error('Biometric device not connected');
+      showError('Biometric device not connected');
       return;
     }
 
@@ -80,7 +80,7 @@ const BiometricLoginButton = ({ onSuccess, onError }) => {
         setScanStatus('error');
         const errorMessage = data.error || 'Biometric login failed';
         setErrorMessage(errorMessage);
-        toast.error(errorMessage);
+        showError(errorMessage);
 
         // Call error callback if provided
         if (onError) {
@@ -93,7 +93,7 @@ const BiometricLoginButton = ({ onSuccess, onError }) => {
       setScanStatus('error');
       const errorMsg = 'Network error during biometric login';
       setErrorMessage(errorMsg);
-      toast.error(errorMsg);
+      showError(errorMsg);
 
       if (onError) {
         onError('Network error');

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { FaLock, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa';
 import { employeeApi } from '../services/apiService';
-import { toast } from 'react-toastify';
+import { showSuccess, showError } from '../utils/toast';
 
 const ChangePassword = ({ employeeId, onClose, onPasswordChanged, onSuccess }) => {
   const [formData, setFormData] = useState({
@@ -80,9 +80,9 @@ const ChangePassword = ({ employeeId, onClose, onPasswordChanged, onSuccess }) =
       });
 
       if (result.error) {
-        toast.error(result.error);
+        showError(result.error);
       } else {
-        toast.success('Password changed successfully!');
+        showSuccess('Password changed successfully!');
         // Update localStorage to mark password as changed
         const employeeData = JSON.parse(localStorage.getItem('currentEmployee') || '{}');
         employeeData.passwordChanged = true;

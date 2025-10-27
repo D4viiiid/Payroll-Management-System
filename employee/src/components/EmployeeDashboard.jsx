@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { FaUser, FaCalendarAlt, FaMoneyBillWave, FaMinusCircle, FaClock, FaSignOutAlt, FaIdCard, FaEnvelope, FaBriefcase, FaDollarSign, FaPhone, FaMapMarkerAlt, FaVenusMars, FaBirthdayCake, FaPrint, FaHistory, FaEye, FaTimes, FaLock, FaCamera } from "react-icons/fa";
 import { employeeApi, attendanceApi, salaryApi, eventBus } from "../services/apiService";
-import { toast } from 'react-toastify';
+import { showSuccess, showError, showInfo } from '../utils/toast';
 import { logger } from '../utils/logger';
 import { compressImage, validateImageFile, formatFileSize } from '../utils/imageOptimization';
 import logo from '../assets/logo.png';
@@ -830,7 +830,7 @@ const EmployeeDashboard = () => {
         // Get employee data from localStorage (set during login)
         const storedEmployee = localStorage.getItem('currentEmployee');
         if (!storedEmployee) {
-          toast.error('No employee data found. Please login again.');
+          showError('No employee data found. Please login again.');
           window.location.href = '/';
           return;
         }
@@ -918,7 +918,7 @@ const EmployeeDashboard = () => {
 
       } catch (error) {
         logger.error('Error fetching employee data:', error);
-        toast.error('Failed to load employee data');
+        showError('Failed to load employee data');
       } finally {
         setLoading(false);
       }
@@ -979,7 +979,7 @@ const EmployeeDashboard = () => {
     });
 
     if (!validation.valid) {
-      toast.error(validation.error);
+      showError(validation.error);
       return;
     }
 
@@ -1012,7 +1012,7 @@ const EmployeeDashboard = () => {
       }
 
       if (result.error) {
-        toast.error(result.error);
+        showError(result.error);
       } else {
         // Update local state
         const updatedEmployee = { ...employee, profilePicture: result.profilePicture };
@@ -1023,11 +1023,11 @@ const EmployeeDashboard = () => {
         localStorage.setItem('currentEmployee', JSON.stringify(updatedEmployee));
         logger.log(`📸 Updated localStorage with new profile picture`);
         
-        toast.success('Profile picture updated successfully!');
+        showSuccess('Profile picture updated successfully!');
       }
     } catch (error) {
       logger.error('Error uploading profile picture:', error);
-      toast.error('Failed to upload profile picture');
+      showError('Failed to upload profile picture');
     } finally {
       setUploadingPicture(false);
     }
@@ -2117,7 +2117,7 @@ const EmployeeDashboard = () => {
             const updatedEmployee = { ...employee, requiresPasswordChange: false };
             setEmployee(updatedEmployee);
             localStorage.setItem('currentEmployee', JSON.stringify(updatedEmployee));
-            toast.success('Password changed successfully!');
+            showSuccess('Password changed successfully!');
           }}
         />
       )}

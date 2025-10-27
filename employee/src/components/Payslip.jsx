@@ -4,7 +4,7 @@ import logo from '../assets/logo.png';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import './Admin.responsive.css';
-import { showSuccess, showError, showConfirm } from '../utils/toast';
+import { showSuccess, showError, showConfirm, showWarning, showInfo } from '../utils/toast';
 
 const Payslip = () => {
   const { employeeId } = useParams();
@@ -92,10 +92,10 @@ const Payslip = () => {
       link.parentNode.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      alert('✅ Payslip PDF downloaded successfully!');
+      showSuccess('✅ Payslip PDF downloaded successfully!');
     } catch (error) {
       logger.error('Error downloading PDF:', error);
-      alert('❌ Failed to download PDF. Please try again.');
+      showError('❌ Failed to download PDF. Please try again.');
     } finally {
       setDownloadingPdf(false);
     }
@@ -139,10 +139,10 @@ const Payslip = () => {
         )
       );
 
-      alert('✅ Payslip marked as Done successfully!');
+      showSuccess('✅ Payslip marked as Done successfully!');
     } catch (error) {
       logger.error('Error marking payslip as done:', error);
-      alert('❌ Failed to mark payslip as done. Please try again.');
+      showError('❌ Failed to mark payslip as done. Please try again.');
     }
   };
 

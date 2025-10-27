@@ -6,7 +6,7 @@ import biometricService from '../services/biometricService'; // ✅ BUG #15 FIX:
 import BiometricEnrollmentSection from './BiometricEnrollmentSection';
 import FingerprintBridgeStatus from './FingerprintBridgeStatus';
 import { logger } from '../utils/logger';
-import { showSuccess, showError, showConfirm } from "../utils/toast"; // ✅ BUG #25 FIX
+import { showSuccess, showError, showConfirm, showWarning, showInfo } from "../utils/toast"; // ✅ BUG #25 FIX
 import './Admin.responsive.css';
 
 const Employees = () => {
@@ -196,7 +196,7 @@ const Employees = () => {
       
       if (result.success) {
         setEnrollmentStatus('Fingerprint enrollment completed!');
-        alert(`✅ Fingerprint enrolled successfully for ${employee.firstName} ${employee.lastName}!`);
+        showSuccess(`✅ Fingerprint enrolled successfully for ${employee.firstName} ${employee.lastName}!`);
         
         // Refresh employee data
         fetchEmployees();
@@ -209,7 +209,7 @@ const Employees = () => {
     } catch (error) {
       logger.error('❌ Fingerprint enrollment error:', error);
       setEnrollmentStatus('Error: ' + error.message);
-      alert('Fingerprint Biometric Failed: ' + error.message);
+      showError('Fingerprint Biometric Failed: ' + error.message);
       setEnrollingEmployee(null);
     }
   };
@@ -255,7 +255,7 @@ const Employees = () => {
       setScanStatus('Fingerprint scanned successfully!');
       
       // Show success message
-      alert(`Fingerprint scanned and saved for ${scanningEmployee.firstName} ${scanningEmployee.lastName}!`);
+      showSuccess(`Fingerprint scanned and saved for ${scanningEmployee.firstName} ${scanningEmployee.lastName}!`);
       
       // Close scanner and refresh data
       setTimeout(() => {
@@ -268,7 +268,7 @@ const Employees = () => {
     } catch (error) {
       logger.error('Error scanning fingerprint:', error);
       setScanStatus('Error: ' + error.message);
-      alert('Error scanning fingerprint: ' + error.message);
+      showError('Error scanning fingerprint: ' + error.message);
     }
   };
 
@@ -326,7 +326,7 @@ const Employees = () => {
         setEnrollmentStatus('Fingerprint enrollment completed!');
         
         // Show success message
-        alert(`✅ Fingerprint enrolled successfully for ${enrollingEmployee.firstName} ${enrollingEmployee.lastName}!`);
+        showSuccess(`✅ Fingerprint enrolled successfully for ${enrollingEmployee.firstName} ${enrollingEmployee.lastName}!`);
         
         // Close the modal
         setShowEnrollmentModal(false);
@@ -342,7 +342,7 @@ const Employees = () => {
     } catch (error) {
       logger.error('Error in fingerprint enrollment:', error);
       setEnrollmentStatus('Error: ' + error.message);
-      alert('Fingerprint Enrollment Failed: ' + error.message);
+      showError('Fingerprint Enrollment Failed: ' + error.message);
       setEnrollingEmployee(null);
     }
   };
@@ -448,7 +448,7 @@ const Employees = () => {
       setShowBiometricSection(true);
       
       // Don't close the modal yet - let user enroll fingerprints
-      alert('Employee added successfully! You can now enroll fingerprints (optional).');
+      showSuccess('Employee added successfully! You can now enroll fingerprints (optional).');
       
       // Reset form but keep modal open for biometric enrollment
       setFormData({
@@ -463,7 +463,7 @@ const Employees = () => {
       });
     } catch (error) {
       logger.error('Error adding employee:', error);
-      alert('Error adding employee: ' + error.message);
+      showError('Error adding employee: ' + error.message);
     }
   };
 

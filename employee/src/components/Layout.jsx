@@ -53,16 +53,24 @@ const Layout = ({ children }) => {
                 color: 'white', 
                 fontSize: '1.1rem', 
                 whiteSpace: 'nowrap', 
-                background: 'transparent', 
+                background: 'transparent !important', 
                 border: 'none', 
                 textAlign: 'left', 
                 width: '100%',
                 padding: '12px 16px',
                 borderRadius: '8px',
-                transition: 'none'
+                transition: 'none',
+                backgroundColor: 'transparent',
+                backgroundImage: 'none',
+                boxShadow: 'none'
               }}
-              onMouseOver={(e) => {
-                // No hover effect for logout
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.background = 'transparent';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.background = 'transparent';
               }}
             >
               <i className="fas fa-sign-out-alt me-3" style={{ color: 'white', fontSize: '1.2rem' }}></i>Logout

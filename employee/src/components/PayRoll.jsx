@@ -5,7 +5,7 @@ import { logger } from "../utils/logger";
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import './Admin.responsive.css';
-import { showSuccess, showError, showConfirm } from '../utils/toast';
+import { showSuccess, showError, showConfirm, showWarning, showInfo } from '../utils/toast';
 
 import { getAllPayrolls, createPayroll, updatePayroll, deletePayroll, archivePayroll, restorePayroll } from "../services/payrollService";
 import { getCurrentSalaryRate } from "../services/salaryRateService";
@@ -547,7 +547,7 @@ const Payroll = () => {
     e.preventDefault();
 
     if (!editingId && !selectedEmployee && !selectAll) {
-      alert('Please select an employee first!');
+      showWarning('Please select an employee first!');
       return;
     }
 
@@ -572,7 +572,7 @@ const Payroll = () => {
           const result = await createPayroll(payrollData);
           results.push(result);
         }
-        alert(`Successfully created payroll for ${results.length} employees!`);
+        showSuccess(`Successfully created payroll for ${results.length} employees!`);
         
       } else if (selectedEmployee) {
         const employeeName = `${selectedEmployee.firstName} ${selectedEmployee.lastName}`.trim();
@@ -590,10 +590,10 @@ const Payroll = () => {
 
         if (editingId) {
           await updatePayroll(editingId, payrollData);
-          alert('Payroll updated successfully!');
+          showSuccess('Payroll updated successfully!');
         } else {
           await createPayroll(payrollData);
-          alert('Payroll added successfully!');
+          showSuccess('Payroll added successfully!');
         }
       }
 
@@ -612,7 +612,7 @@ const Payroll = () => {
 
     } catch (error) {
       logger.error('Error saving payroll:', error);
-      alert(`Error: ${error.message}`);
+      showError(`Error: ${error.message}`);
     }
   };
 
@@ -748,7 +748,7 @@ const Payroll = () => {
     });
     setSelectedEmployee(null);
     setEditingId(null);
-    alert('Edit cancelled.');
+    showInfo('Edit cancelled.');
   };
 
   // Calculate Net Salary Automatically
@@ -785,7 +785,7 @@ const Payroll = () => {
   const handleRefresh = () => {
     fetchEmployeeAndDeductionData();
     fetchArchivedPayrolls();
-    alert('Data refreshed successfully!');
+    showSuccess('Data refreshed successfully!');
   };
 
   // ✅ FIX ISSUE #3: Handle table column sorting

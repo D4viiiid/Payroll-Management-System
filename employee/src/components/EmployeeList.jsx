@@ -6,7 +6,7 @@ import AdminHeader from './AdminHeader';
 import { optimizedMemo } from '../utils/reactOptimization';
 import { logger } from '../utils/logger';
 import biometricService from '../services/biometricService'; // ✅ Import bridge service
-import { showSuccess, showError, showConfirm } from '../utils/toast';
+import { showSuccess, showError, showConfirm, showWarning, showInfo } from '../utils/toast';
 import './Admin.responsive.css';
 
 // Memoized Employee Row Component for better performance
@@ -193,7 +193,7 @@ const handleFingerprintEnrollment = async () => {
     }
 
     // Alert user to prepare for fingerprint scan
-    alert('📱 Device ready! Place your finger on the scanner when prompted.\n\nYou will need to scan 3 times. Wait for the green light between scans.');
+    showInfo('📱 Device ready! Place your finger on the scanner when prompted.\n\nYou will need to scan 3 times. Wait for the green light between scans.');
     
     setFingerprintStep(1); // Show scanning status
     logger.log('👆 Starting fingerprint enrollment...');
@@ -232,7 +232,7 @@ const handleFingerprintEnrollment = async () => {
     
     setFingerprintStep(2); // Success
     logger.log('✅ Fingerprint captured and credentials generated!');
-    alert('✅ Fingerprint enrolled successfully!\n\nEmployee ID: ' + generatedEmployeeId + '\nPassword: ' + generatedPassword + '\n\nPlease fill in the remaining employee details and click "Add Employee".');
+    showSuccess('✅ Fingerprint enrolled successfully!\n\nEmployee ID: ' + generatedEmployeeId + '\nPassword: ' + generatedPassword + '\n\nPlease fill in the remaining employee details and click "Add Employee".');
     
     // Auto-hide success message
     setTimeout(() => {
@@ -252,7 +252,7 @@ const handleFingerprintEnrollment = async () => {
       userMessage = 'Cannot connect to fingerprint bridge. Please make sure:\n1. Fingerprint bridge is running (START_BRIDGE.bat)\n2. ZKTeco scanner is connected\n3. Bridge is accessible at https://localhost:3003';
     }
     
-    alert('❌ Fingerprint Enrollment Failed:\n' + userMessage);
+    showError('❌ Fingerprint Enrollment Failed:\n' + userMessage);
     setFingerprintStep(0);
     setIsEnrollingFingerprint(false);
     
@@ -337,21 +337,21 @@ const handleFingerprintEnrollment = async () => {
       
       // VALIDATION: Check if fingerprint flag is set for new employees
       if (!editingEmployee && !formData.fingerprintEnrolled) {
-        alert('Please click "Enroll Fingerprint" button first to generate credentials!');
+        showWarning('Please click "Enroll Fingerprint" button first to generate credentials!');
         setLoading(false);
         return;
       }
 
       // VALIDATION: Check if credentials are filled
       if (!editingEmployee && (!formData.employeeId || !formData.username || !formData.password)) {
-        alert('Please enroll fingerprint to generate credentials first!');
+        showWarning('Please enroll fingerprint to generate credentials first!');
         setLoading(false);
         return;
       }
 
       // ✅ ADDED: Contact Number Validation
       if (!formData.contactNumber.trim()) {
-        alert('Please enter contact number!');
+        showWarning('Please enter contact number!');
         setLoading(false);
         return;
       }
@@ -415,7 +415,7 @@ const handleFingerprintEnrollment = async () => {
         // Close modal after state is updated
         setShowEditForm(false);
         setEditingEmployee(null);
-        alert('Employee updated successfully!');
+        showSuccess('Employee updated successfully!');
       } else {
         // Create employee first
         const createResult = await employeeApi.create(employeeData);
@@ -444,14 +444,14 @@ const handleFingerprintEnrollment = async () => {
             };
             
             await employeeApi.update(createdEmployee._id, updateData);
-            alert('✅ Employee added and fingerprint enrolled successfully!');
+            showSuccess('✅ Employee added and fingerprint enrolled successfully!');
             setCapturedFingerprintTemplate(null);
           } catch (enrollError) {
             logger.error('Fingerprint save error:', enrollError);
-            alert('⚠️ Employee created but fingerprint save failed: ' + enrollError.message);
+            showWarning('⚠️ Employee created but fingerprint save failed: ' + enrollError.message);
           }
         } else {
-          alert('Employee added successfully!');
+          showSuccess('Employee added successfully!');
         }
         
         setShowAddForm(false);
@@ -480,7 +480,7 @@ const handleFingerprintEnrollment = async () => {
     } catch (err) {
       logger.error('Error saving employee:', err);
       setError(err.message);
-      alert('Error: ' + err.message);
+      showError('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -504,12 +504,12 @@ const handleFingerprintEnrollment = async () => {
         } else {
           // Handle specific error: Employee already deleted
           if (result.error.includes('Employee not found')) {
-            alert('This employee has already been deleted. Refreshing list...');
+            showWarning('This employee has already been deleted. Refreshing list...');
             // Remove from local state and refresh with BYPASS CACHE
             setEmployees(prev => prev.filter(emp => emp._id !== id));
             await fetchEmployees(true); // ✅ Manual fetch only for error case
           } else {
-            alert('Error: ' + result.error);
+            showError('Error: ' + result.error);
           }
         }
         setError(null);
@@ -517,12 +517,12 @@ const handleFingerprintEnrollment = async () => {
         setError(err.message);
         // Handle specific error: Employee already deleted
         if (err.message.includes('Employee not found')) {
-          alert('This employee has already been deleted. Refreshing list...');
+          showWarning('This employee has already been deleted. Refreshing list...');
           // Remove from local state and refresh with BYPASS CACHE
           setEmployees(prev => prev.filter(emp => emp._id !== id));
           await fetchEmployees(true); // ✅ Manual fetch only for error case
         } else {
-          alert('Error: ' + err.message);
+          showError('Error: ' + err.message);
         }
       } finally {
         setLoading(false);
@@ -707,7 +707,7 @@ const handleFingerprintEnrollment = async () => {
 
   const handleRegenerateCredentials = () => {
     if (!formData.fingerprintEnrolled) {
-      alert('Please enroll fingerprint first!');
+      showWarning('Please enroll fingerprint first!');
       return;
     }
     const employeeId = generateEmployeeId();

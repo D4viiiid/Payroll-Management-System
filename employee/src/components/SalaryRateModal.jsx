@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getCurrentSalaryRate, getSalaryRateHistory, createSalaryRate } from '../services/salaryRateService';
 import { logger } from '../utils/logger';
-import { showSuccess, showError, showConfirm } from '../utils/toast';
+import { showSuccess, showError, showConfirm, showWarning, showInfo } from '../utils/toast';
 
 const SalaryRateModal = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
@@ -122,7 +122,7 @@ const SalaryRateModal = ({ isOpen, onClose, onSuccess }) => {
       
       logger.info('✅ Salary rate updated successfully:', response);
       
-      alert(`✅ Salary rate updated successfully!\n\nNew Rate: ₱${formData.dailyRate} daily\nHourly: ₱${calculatedRates.hourlyRate}/hr\nOvertime: ₱${calculatedRates.overtimeRate}/hr`);
+      showSuccess(`✅ Salary rate updated successfully!\n\nNew Rate: ₱${formData.dailyRate} daily\nHourly: ₱${calculatedRates.hourlyRate}/hr\nOvertime: ₱${calculatedRates.overtimeRate}/hr`);
       
       // Reset form
       setFormData({
@@ -146,7 +146,7 @@ const SalaryRateModal = ({ isOpen, onClose, onSuccess }) => {
       
     } catch (error) {
       logger.error('❌ Error updating salary rate:', error);
-      alert(`Error updating salary rate: ${error.response?.data?.message || error.message}`);
+      showError(`Error updating salary rate: ${error.response?.data?.message || error.message}`);
     } finally {
       setLoading(false);
     }

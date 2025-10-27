@@ -41,7 +41,10 @@ const AdminSidebar = ({ isMobileOpen = false, onClose = () => {} }) => {
           style={{ 
             width: '140px',
             margin: "auto",
-            marginBottom: '10px'
+            marginBottom: '10px',
+            cursor: 'default',
+            pointerEvents: 'none',
+            userSelect: 'none'
           }} 
         />
       </div>
@@ -210,14 +213,14 @@ const AdminSidebar = ({ isMobileOpen = false, onClose = () => {} }) => {
             className="nav-link admin-nav-link"
             style={{
               ...getLinkStyle('/logout'),
-              backgroundColor: 'rgba(255, 255, 255, 0.1)'
+              backgroundColor: 'transparent'
             }}
             onClick={handleLinkClick}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+              e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
             <FaSignOutAlt className="me-3" style={{ fontSize: '1.1rem' }} />

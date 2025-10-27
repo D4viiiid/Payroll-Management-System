@@ -75,6 +75,63 @@ const fixTimezoneForClient = (record) => {
   return fixed;
 };
 
+// ✅ AUTO-TIMEOUT LOGIC: Fill missing timeouts with 5PM to prevent salary inflation
+// RULES:
+// 1. Only fill if employee hasn't timed out WITHIN THE SAME DAY
+// 2. Check if current time is past the day (not today)
+// 3. Auto-fill with 5:00 PM (17:00)
+const autoFillMissingTimeouts = (records) => {
+  const now = getPhilippinesNow();
+  const todayDate = getDateOnly(); // YYYY-MM-DD format
+  
+  return records.map(record => {
+    // Skip if already has timeout
+    if (record.timeOut) return record;
+    
+    // Skip if no timeIn
+    if (!record.timeIn) return record;
+    
+    // Get the date of this attendance record
+    const recordDate = record.date ? new Date(record.date) : new Date(record.timeIn);
+    const recordDateStr = recordDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    // Only auto-fill if record is from a PAST day (not today)
+    // This ensures we only fill timeouts AFTER the day has ended
+    if (recordDateStr < todayDate) {
+      // Create a 5PM timeout on the same day as timeIn
+      const timeInDate = new Date(record.timeIn);
+      const autoTimeout = new Date(timeInDate);
+      autoTimeout.setHours(17, 0, 0, 0); // 5:00 PM sharp
+      
+      console.log(`⏰ AUTO-TIMEOUT: Employee ${record.employeeId || 'unknown'} on ${recordDateStr} - Setting timeout to 5:00 PM (timeIn was ${timeInDate.toLocaleTimeString('en-US', { hour12: true, timeZone: 'Asia/Manila' })})`);
+      
+      // Calculate work hours (simple: 5PM - timeIn, minus 1 hour lunch)
+      const timeInHours = timeInDate.getHours() + (timeInDate.getMinutes() / 60);
+      const timeOutHours = 17; // 5PM
+      let workHours = timeOutHours - timeInHours;
+      
+      // Subtract 1 hour lunch if worked through lunch time (12-1PM)
+      if (timeInHours < 13 && timeOutHours > 12) {
+        workHours -= 1;
+      }
+      workHours = Math.max(0, workHours);
+      
+      // Update the record with auto-filled timeout
+      return {
+        ...record,
+        timeOut: autoTimeout.toISOString(),
+        status: 'present',
+        dayType: workHours >= 8 ? 'Full Day' : 'Half Day',
+        actualHoursWorked: workHours,
+        autoFilledTimeout: true // Flag to indicate this was auto-filled
+      };
+    }
+    
+    // Record is from today - don't auto-fill
+    return record;
+  });
+};
+
 // Helper function to normalize fingerprint template format
 const normalizeFingerprintTemplate = (template) => {
   if (!template) return null;
@@ -260,8 +317,11 @@ router.get('/attendance', async (req, res) => {
                 .exec()
         ]);
 
+        // ✅ AUTO-TIMEOUT: Fill missing timeouts with 5PM for past days
+        const autoFilledResults = autoFillMissingTimeouts(results);
+
         // ✅ CRITICAL FIX BUG #24: Transform timezone-naive datetimes to Manila timezone ISO strings
-        const fixedResults = results.map(fixTimezoneForClient);
+        const fixedResults = autoFilledResults.map(fixTimezoneForClient);
 
         // Build paginated response
         const response = createPaginatedResponse(fixedResults, totalCount, paginationParams);

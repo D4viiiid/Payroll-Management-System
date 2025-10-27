@@ -47,7 +47,7 @@ const Layout = ({ children }) => {
           </li>
           <li className="nav-item mt-4">
             <button 
-              className="nav-link" 
+              className="nav-link no-hover" 
               onClick={() => setShowLogout(true)} 
               style={{ 
                 color: 'white', 
@@ -63,14 +63,6 @@ const Layout = ({ children }) => {
                 backgroundColor: 'transparent',
                 backgroundImage: 'none',
                 boxShadow: 'none'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.background = 'transparent';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.background = 'transparent';
               }}
             >
               <i className="fas fa-sign-out-alt me-3" style={{ color: 'white', fontSize: '1.2rem' }}></i>Logout

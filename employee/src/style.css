@@ -12,6 +12,14 @@
   color: #ffffff !important;
 }
 
+/* ✅ FIX: Prevent hover effect on logout buttons */
+.sidebar-link.no-hover:hover,
+.nav-link.no-hover:hover,
+button.no-hover:hover {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
 .sidebar-link.active,
 .sidebar-link.active:hover {
   background-color: rgba(255, 255, 255, 0.25);

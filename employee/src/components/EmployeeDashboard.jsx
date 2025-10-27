@@ -1347,23 +1347,17 @@ const EmployeeDashboard = () => {
           {/* Logout Button */}
           <li className="nav-item mt-3">
             <button 
-              className="nav-link w-100 text-start d-flex align-items-center" 
+              className="nav-link no-hover w-100 text-start d-flex align-items-center" 
               onClick={handleLogout}
               style={{ 
                 color: 'white',
                 fontSize: '0.95rem',
                 fontWeight: '500',
                 padding: '12px 16px',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                backgroundColor: 'transparent',
                 border: 'none',
                 borderRadius: '8px',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                transition: 'none'
               }}
             >
               <FaSignOutAlt className="me-3" style={{ fontSize: '1.1rem' }} />

@@ -57,7 +57,9 @@ REM [2/5] Check if node_modules exists
 echo [2/5] Checking dependencies...
 if not exist "node_modules\" (
     echo       ⚠️  Dependencies not found. Installing...
-    call npm install
+    echo.
+    echo       Installing core dependencies...
+    call npm install express@^4.18.2 cors@^2.8.5 dotenv@^16.4.7 node-windows@^1.0.0-beta.8 --save
     if errorlevel 1 (
         echo.
         echo       ❌ Failed to install dependencies!
@@ -65,9 +67,37 @@ if not exist "node_modules\" (
         pause
         exit /b 1
     )
+    echo.
+    echo       Installing optional USB detection...
+    call npm install usb-detection@^4.14.2 --save-optional
     echo       ✅ Dependencies installed successfully
 ) else (
     echo       ✅ Dependencies found
+    
+    REM ✅ CRITICAL FIX: Verify critical dependencies exist
+    echo       Verifying critical modules...
+    
+    if not exist "node_modules\express\" (
+        echo       ❌ express module missing! Reinstalling...
+        call npm install express@^4.18.2 --save
+    )
+    
+    if not exist "node_modules\dotenv\" (
+        echo       ❌ dotenv module missing! Reinstalling...
+        call npm install dotenv@^16.4.7 --save
+    )
+    
+    if not exist "node_modules\cors\" (
+        echo       ❌ cors module missing! Reinstalling...
+        call npm install cors@^2.8.5 --save
+    )
+    
+    if not exist "node_modules\node-windows\" (
+        echo       ❌ node-windows module missing! Reinstalling...
+        call npm install node-windows@^1.0.0-beta.8 --save
+    )
+    
+    echo       ✅ All critical modules verified
 )
 echo.
 

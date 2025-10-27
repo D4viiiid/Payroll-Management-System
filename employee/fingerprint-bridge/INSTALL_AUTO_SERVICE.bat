@@ -195,15 +195,124 @@ node --version
 echo ✅ Node.js found
 
 echo.
-echo [4/6] Installing node-windows package...
-call npm install node-windows
+echo [4/6] Installing core Node.js dependencies...
+echo.
+echo Installing required packages (this may take 2-3 minutes)...
+echo   - express (web framework)
+echo   - cors (cross-origin support)
+echo   - dotenv (environment variables)
+echo   - node-windows (Windows service support)
+echo.
+
+REM ✅ CRITICAL FIX: Install dependencies one-by-one to catch errors
+REM Install express first
+call npm install express@^4.18.2 --save
+if %errorLevel% neq 0 (
+    echo.
+    echo ❌ ERROR: Failed to install express!
+    echo.
+    pause
+    exit /b 1
+)
+echo ✅ express installed
+
+REM Install cors
+call npm install cors@^2.8.5 --save
+if %errorLevel% neq 0 (
+    echo.
+    echo ❌ ERROR: Failed to install cors!
+    echo.
+    pause
+    exit /b 1
+)
+echo ✅ cors installed
+
+REM Install dotenv
+call npm install dotenv@^16.4.7 --save
+if %errorLevel% neq 0 (
+    echo.
+    echo ❌ ERROR: Failed to install dotenv!
+    echo.
+    pause
+    exit /b 1
+)
+echo ✅ dotenv installed
+
+REM Install node-windows
+call npm install node-windows@^1.0.0-beta.8 --save
+if %errorLevel% neq 0 (
+    echo.
+    echo ❌ ERROR: Failed to install node-windows!
+    echo.
+    pause
+    exit /b 1
+)
+echo ✅ node-windows installed
 
 echo.
-echo [5/6] Installing local dependencies...
-call npm install
+echo [5/6] Installing optional USB detection (requires Build Tools)...
+echo.
+echo ⚠️  USB auto-detection is OPTIONAL and requires Visual Studio Build Tools.
+echo    If this fails, the bridge will still work without auto-detection.
+echo.
+
+REM ✅ Try to install usb-detection (may fail without Build Tools - that's OK)
+call npm install usb-detection@^4.14.2 --save-optional
+if %errorLevel% neq 0 (
+    echo.
+    echo ⚠️  USB auto-detection installation failed (missing Build Tools)
+    echo    The bridge will work WITHOUT auto-detection.
+    echo.
+    echo 💡 To enable auto-detection, install Visual Studio Build Tools:
+    echo    https://visualstudio.microsoft.com/visual-cpp-build-tools/
+    echo.
+    echo    Then run: npm install usb-detection
+    echo.
+) else (
+    echo ✅ USB auto-detection installed successfully!
+)
 
 echo.
-echo [5.5/6] Generating SSL certificate for HTTPS...
+echo [5.5/6] Verifying Node.js dependencies installation...
+echo.
+
+REM Verify all critical dependencies were installed
+node -e "require('express'); console.log('✅ express verified')"
+if %errorLevel% neq 0 (
+    echo ❌ express verification failed!
+    pause
+    exit /b 1
+)
+
+node -e "require('cors'); console.log('✅ cors verified')"
+if %errorLevel% neq 0 (
+    echo ❌ cors verification failed!
+    pause
+    exit /b 1
+)
+
+node -e "require('dotenv'); console.log('✅ dotenv verified')"
+if %errorLevel% neq 0 (
+    echo ❌ dotenv verification failed!
+    pause
+    exit /b 1
+)
+
+node -e "require('node-windows'); console.log('✅ node-windows verified')"
+if %errorLevel% neq 0 (
+    echo ❌ node-windows verification failed!
+    pause
+    exit /b 1
+)
+
+REM Try USB detection (optional)
+node -e "try { require('usb-detection'); console.log('✅ usb-detection verified'); } catch(e) { console.log('⚠️  usb-detection not available (optional)'); }" 2>nul
+
+echo.
+echo ✅ All critical dependencies verified!
+
+echo.
+echo [5.7/6] Generating SSL certificate for HTTPS...
 echo This allows the Vercel web app to connect to the bridge!
 node generate-certificate.js
 if %errorLevel% equ 0 (
@@ -214,7 +323,7 @@ if %errorLevel% equ 0 (
 )
 
 echo.
-echo [5.6/6] Setting up MongoDB configuration...
+echo [5.8/6] Setting up MongoDB configuration...
 if not exist "config.env" (
     if exist "config.env.example" (
         echo Creating config.env from template...
@@ -234,7 +343,7 @@ if not exist "config.env" (
 )
 
 echo.
-echo [6/6] Creating Windows Service...
+echo [5.9/6] Creating Windows Service...
 echo Running from directory: %CD%
 node install-service.js
 

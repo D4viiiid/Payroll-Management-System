@@ -7,6 +7,7 @@ import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import SalaryRateModal from './SalaryRateModal'; // ✅ Import the existing modal
 import './Admin.responsive.css';
+import { showSuccess, showError, showConfirm } from '../utils/toast';
 
 // ✅ FIXED: Status Badge Component - Now handles both "Full Day" and "Full-day" formats
 // Uses inline conditional classes instead of dynamic class strings for Tailwind compatibility
@@ -512,73 +513,91 @@ const Salary = () => {
   // === ARCHIVE FUNCTION ===
   const handleArchive = async (id) => {
     if (!id) {
-      alert('Error: Cannot archive - No ID provided');
+      showError('Error: Cannot archive - No ID provided');
       logger.error('Archive error: No ID provided');
       return;
     }
 
-    if (window.confirm('Are you sure you want to archive this salary record?')) {
-      try {
-        setLoading(true);
-
-        logger.log('🔄 Attempting to archive salary record with ID:', id);
-
-        const result = await salaryApi.archive(id);
-        if (result.error) {
-          setError(result.error);
-          alert(`Error: ${result.error}`);
-        } else {
-          // Refresh the list
-          await fetchSalaries();
-          setError(null);
-          alert('Salary record archived successfully!');
-        }
-
-      } catch (err) {
-        logger.error('❌ Archive error details:', err);
-
-        const errorMessage = err.message || 'Archive failed';
-        setError(errorMessage);
-        alert(`Error: ${errorMessage}`);
-      } finally {
-        setLoading(false);
+    const confirmed = await showConfirm(
+      'Are you sure you want to archive this salary record?',
+      {
+        confirmText: 'Archive',
+        cancelText: 'Cancel',
+        confirmColor: '#a855f7' // Purple for archive
       }
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      setLoading(true);
+
+      logger.log('🔄 Attempting to archive salary record with ID:', id);
+
+      const result = await salaryApi.archive(id);
+      if (result.error) {
+        setError(result.error);
+        showError(`Error: ${result.error}`);
+      } else {
+        // Refresh the list
+        await fetchSalaries();
+        setError(null);
+        showSuccess('Salary record archived successfully!');
+      }
+
+    } catch (err) {
+      logger.error('❌ Archive error details:', err);
+
+      const errorMessage = err.message || 'Archive failed';
+      setError(errorMessage);
+      showError(`Error: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
   };
 
   // === RESTORE FROM ARCHIVE FUNCTION ===
   const handleRestore = async (id) => {
     if (!id) {
-      alert('Error: Cannot restore - No ID provided');
+      showError('Error: Cannot restore - No ID provided');
       return;
     }
 
-    if (window.confirm('Are you sure you want to restore this salary record?')) {
-      try {
-        setLoading(true);
-
-        logger.log('🔄 Attempting to restore salary record with ID:', id);
-
-        const result = await salaryApi.restore(id);
-        if (result.error) {
-          setError(result.error);
-          alert(`Error: ${result.error}`);
-        } else {
-          // Refresh the list
-          await fetchSalaries();
-          setError(null);
-          alert('Salary record restored successfully!');
-        }
-
-      } catch (err) {
-        logger.error('❌ Restore error details:', err);
-
-        const errorMessage = err.message || 'Restore failed';
-        setError(errorMessage);
-        alert(`Error: ${errorMessage}`);
-      } finally {
-        setLoading(false);
+    const confirmed = await showConfirm(
+      'Are you sure you want to restore this salary record?',
+      {
+        confirmText: 'Restore',
+        cancelText: 'Cancel',
+        confirmColor: '#10b981' // Green for restore
       }
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      setLoading(true);
+
+      logger.log('🔄 Attempting to restore salary record with ID:', id);
+
+      const result = await salaryApi.restore(id);
+      if (result.error) {
+        setError(result.error);
+        showError(`Error: ${result.error}`);
+      } else {
+        // Refresh the list
+        await fetchSalaries();
+        setError(null);
+        showSuccess('Salary record restored successfully!');
+      }
+
+    } catch (err) {
+      logger.error('❌ Restore error details:', err);
+
+      const errorMessage = err.message || 'Restore failed';
+      setError(errorMessage);
+      showError(`Error: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
   };
 

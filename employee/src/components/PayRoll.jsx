@@ -5,6 +5,7 @@ import { logger } from "../utils/logger";
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import './Admin.responsive.css';
+import { showSuccess, showError, showConfirm } from '../utils/toast';
 
 import { getAllPayrolls, createPayroll, updatePayroll, deletePayroll, archivePayroll, restorePayroll } from "../services/payrollService";
 import { getCurrentSalaryRate } from "../services/salaryRateService";
@@ -642,71 +643,98 @@ const Payroll = () => {
 
   // ✅ CRITICAL FIX ISSUE #2: Archive Payroll - Use dedicated archive endpoint
   const handleArchive = async (id) => {
-    if (window.confirm('Are you sure you want to archive this payroll record?\n\nArchived records will be moved to the archive section and can be restored later.')) {
-      try {
-        // Get the payroll to archive
-        const payrollToArchive = payrolls.find(p => p._id === id);
-        
-        if (!payrollToArchive) {
-          alert('Payroll record not found!');
-          return;
-        }
-
-        // ✅ FIX: Call dedicated archive endpoint instead of general update
-        await archivePayroll(id);
-        
-        // Refresh the payrolls list
-        const updatedPayrolls = await getAllPayrolls();
-        setPayrolls(updatedPayrolls);
-        
-        // Refresh archived payrolls
-        await fetchArchivedPayrolls();
-        
-        alert(`Payroll record for ${payrollToArchive.employeeName} archived successfully!`);
-        
-      } catch (error) {
-        logger.error('ERROR in archive process:', error);
-        alert(`Error archiving payroll: ${error.message}`);
+    const confirmed = await showConfirm(
+      'Are you sure you want to archive this payroll record?\n\nArchived records will be moved to the archive section and can be restored later.',
+      {
+        confirmText: 'Archive',
+        cancelText: 'Cancel',
+        confirmColor: '#a855f7' // Purple for archive
       }
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      // Get the payroll to archive
+      const payrollToArchive = payrolls.find(p => p._id === id);
+      
+      if (!payrollToArchive) {
+        showError('Payroll record not found!');
+        return;
+      }
+
+      // ✅ FIX: Call dedicated archive endpoint instead of general update
+      await archivePayroll(id);
+      
+      // Refresh the payrolls list
+      const updatedPayrolls = await getAllPayrolls();
+      setPayrolls(updatedPayrolls);
+      
+      // Refresh archived payrolls
+      await fetchArchivedPayrolls();
+      
+      showSuccess(`Payroll record for ${payrollToArchive.employeeName} archived successfully!`);
+      
+    } catch (error) {
+      logger.error('ERROR in archive process:', error);
+      showError(`Error archiving payroll: ${error.message}`);
     }
   };
 
   // Restore Payroll from Archive
   const handleRestore = async (id) => {
-    if (window.confirm('Are you sure you want to restore this payroll record?\n\nIt will be moved back to the active payroll records.')) {
-      try {
-        const payrollToRestore = archivedPayrolls.find(p => p._id === id);
-        if (payrollToRestore) {
-          // ✅ FIX: Call dedicated restore endpoint instead of general update
-          await restorePayroll(id);
-          
-          // Refresh both lists
-          const updatedPayrolls = await getAllPayrolls();
-          setPayrolls(updatedPayrolls);
-          fetchArchivedPayrolls();
-          
-          alert(`Payroll record for ${payrollToRestore.employeeName} restored successfully!`);
-        }
-        
-      } catch (error) {
-        logger.error('Error restoring payroll:', error);
-        alert('Error restoring payroll. Please try again.');
+    const confirmed = await showConfirm(
+      'Are you sure you want to restore this payroll record?\n\nIt will be moved back to the active payroll records.',
+      {
+        confirmText: 'Restore',
+        cancelText: 'Cancel',
+        confirmColor: '#10b981' // Green for restore
       }
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      const payrollToRestore = archivedPayrolls.find(p => p._id === id);
+      if (payrollToRestore) {
+        // ✅ FIX: Call dedicated restore endpoint instead of general update
+        await restorePayroll(id);
+        
+        // Refresh both lists
+        const updatedPayrolls = await getAllPayrolls();
+        setPayrolls(updatedPayrolls);
+        fetchArchivedPayrolls();
+        
+        showSuccess(`Payroll record for ${payrollToRestore.employeeName} restored successfully!`);
+      }
+      
+    } catch (error) {
+      logger.error('Error restoring payroll:', error);
+      showError('Error restoring payroll. Please try again.');
     }
   };
 
   // Delete Payroll
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this payroll record?\n\nThis action cannot be undone.')) {
-      try {
-        await deletePayroll(id);
-        const updatedPayrolls = await getAllPayrolls();
-        setPayrolls(updatedPayrolls);
-        alert('Payroll deleted successfully!');
-      } catch (error) {
-        logger.error('Error deleting payroll:', error);
-        alert('Error deleting payroll. Please try again.');
+    const confirmed = await showConfirm(
+      'Are you sure you want to delete this payroll record?\n\nThis action cannot be undone.',
+      {
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        confirmColor: '#ef4444' // Red for delete
       }
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      await deletePayroll(id);
+      const updatedPayrolls = await getAllPayrolls();
+      setPayrolls(updatedPayrolls);
+      showSuccess('Payroll deleted successfully!');
+    } catch (error) {
+      logger.error('Error deleting payroll:', error);
+      showError('Error deleting payroll. Please try again.');
     }
   };
 

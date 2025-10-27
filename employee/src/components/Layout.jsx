@@ -46,7 +46,25 @@ const Layout = ({ children }) => {
             </Link>
           </li>
           <li className="nav-item mt-4">
-            <button className="nav-link sidebar-link" onClick={() => setShowLogout(true)} style={{ color: 'white', fontSize: '1.1rem', whiteSpace: 'nowrap', background: 'transparent', border: 'none', textAlign: 'left', width: '100%' }}>
+            <button 
+              className="nav-link" 
+              onClick={() => setShowLogout(true)} 
+              style={{ 
+                color: 'white', 
+                fontSize: '1.1rem', 
+                whiteSpace: 'nowrap', 
+                background: 'transparent', 
+                border: 'none', 
+                textAlign: 'left', 
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                transition: 'none'
+              }}
+              onMouseOver={(e) => {
+                // No hover effect for logout
+              }}
+            >
               <i className="fas fa-sign-out-alt me-3" style={{ color: 'white', fontSize: '1.2rem' }}></i>Logout
             </button>
           </li>

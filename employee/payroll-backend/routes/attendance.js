@@ -75,6 +75,54 @@ const fixTimezoneForClient = (record) => {
   return fixed;
 };
 
+// ✅ NEW FIX ISSUE #3: Auto-fill missing timeouts with 5PM to prevent salary inflation
+// This function checks if an attendance record is from a past day and has no timeout
+// If so, it auto-fills the timeout as 5:00 PM (17:00) to prevent salary inflation
+const autoFillMissingTimeouts = (records) => {
+  const now = getPhilippinesNow();
+  const todayDate = getDateOnly(); // YYYY-MM-DD format
+  
+  return records.map(record => {
+    // Skip if already has timeout
+    if (record.timeOut) return record;
+    
+    // Skip if no timeIn
+    if (!record.timeIn) return record;
+    
+    // Get the date of this attendance record
+    const recordDate = record.date ? new Date(record.date) : new Date(record.timeIn);
+    const recordDateStr = recordDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    // Only auto-fill if record is from a PAST day (not today)
+    if (recordDateStr < todayDate) {
+      // Create a 5PM timeout on the same day as timeIn
+      const timeInDate = new Date(record.timeIn);
+      const autoTimeout = new Date(timeInDate);
+      autoTimeout.setHours(17, 0, 0, 0); // 5:00 PM sharp
+      
+      console.log(`⏰ AUTO-TIMEOUT: Employee ${record.employeeId || 'unknown'} on ${recordDateStr} - Setting timeout to 5:00 PM (timeIn was ${new Date(record.timeIn).toLocaleTimeString('en-US', { hour12: true, timeZone: 'Asia/Manila' })})`);
+      
+      // Calculate work hours
+      const workHours = calculateWorkHours(record.timeIn, autoTimeout);
+      
+      // Update the record with auto-filled timeout
+      const updatedRecord = {
+        ...record,
+        timeOut: autoTimeout.toISOString(),
+        status: 'present', // Mark as present since they timed in
+        dayType: 'Full Day', // Assume full day if worked until 5PM
+        actualHoursWorked: workHours,
+        autoFilledTimeout: true // Flag to indicate this was auto-filled
+      };
+      
+      return updatedRecord;
+    }
+    
+    // Record is from today or future - don't auto-fill
+    return record;
+  });
+};
+
 // Helper function to calculate work hours (excluding lunch break)
 // Lunch break: 12:00 PM - 12:59 PM (1 hour)
 const calculateWorkHours = (timeIn, timeOut) => {
@@ -295,8 +343,11 @@ router.get('/attendance', async (req, res) => {
                 .exec()
         ]);
 
+        // ✅ NEW FIX ISSUE #3: Auto-fill missing timeouts with 5PM for past days
+        const autoFilledResults = autoFillMissingTimeouts(results);
+
         // ✅ CRITICAL FIX BUG #24: Transform timezone-naive datetimes to Manila timezone ISO strings
-        const fixedResults = results.map(fixTimezoneForClient);
+        const fixedResults = autoFilledResults.map(fixTimezoneForClient);
 
         // Build paginated response
         const response = createPaginatedResponse(fixedResults, totalCount, paginationParams);

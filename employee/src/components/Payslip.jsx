@@ -4,6 +4,7 @@ import logo from '../assets/logo.png';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import './Admin.responsive.css';
+import { showSuccess, showError, showConfirm } from '../utils/toast';
 
 const Payslip = () => {
   const { employeeId } = useParams();
@@ -102,7 +103,16 @@ const Payslip = () => {
 
   // Mark payslip as done
   const handleMarkAsDone = async (payrollId) => {
-    if (!window.confirm('Mark this payslip as Done?\n\nThis will update the payment status to completed.')) {
+    const confirmed = await showConfirm(
+      'Mark this payslip as Done?\n\nThis will update the payment status to completed.',
+      {
+        confirmText: 'Mark as Done',
+        cancelText: 'Cancel',
+        confirmColor: '#10b981' // Green for completion
+      }
+    );
+    
+    if (!confirmed) {
       return;
     }
 

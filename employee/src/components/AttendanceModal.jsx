@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { showSuccess, showError, showInfo } from '../utils/toast';
+import { showSuccess, showError, showInfo, dismissToast } from '../utils/toast';
+import toast from 'react-hot-toast';
 import { logger } from '../utils/logger.js';
 import biometricService from '../services/biometricService';
 import notifSound from '../assets/notif.mp3';

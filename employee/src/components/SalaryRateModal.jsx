@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getCurrentSalaryRate, getSalaryRateHistory, createSalaryRate } from '../services/salaryRateService';
 import { logger } from '../utils/logger';
+import { showSuccess, showError, showConfirm } from '../utils/toast';
 
 const SalaryRateModal = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
@@ -87,7 +88,16 @@ const SalaryRateModal = ({ isOpen, onClose, onSuccess }) => {
       return;
     }
     
-    if (!window.confirm(`Are you sure you want to change the salary rate from ₱${currentRate?.dailyRate || 550} to ₱${formData.dailyRate}?\n\nThis will affect all future salary calculations.`)) {
+    const confirmed = await showConfirm(
+      `Are you sure you want to change the salary rate from ₱${currentRate?.dailyRate || 550} to ₱${formData.dailyRate}?\n\nThis will affect all future salary calculations.`,
+      {
+        confirmText: 'Update Rate',
+        cancelText: 'Cancel',
+        confirmColor: '#f59e0b' // Orange for important changes
+      }
+    );
+    
+    if (!confirmed) {
       return;
     }
     

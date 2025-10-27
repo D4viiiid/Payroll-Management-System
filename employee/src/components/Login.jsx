@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { employeeApi } from "../services/apiService";
-import { toast } from 'react-toastify';
+import { showSuccess, showError, showInfo } from '../utils/toast';
 import { FaUser, FaLock, FaEye, FaEyeSlash, FaFacebookF, FaMapMarkerAlt } from "react-icons/fa";
 import logo from '../assets/logo.png';
 import loginImage from '../assets/login.png';
@@ -70,7 +70,7 @@ const Login = () => {
 
       if (loginResult.error) {
         setError(loginResult.error);
-        toast.error(loginResult.error);
+        showError(loginResult.error);
         return;
       }
 
@@ -85,7 +85,7 @@ const Login = () => {
         
         // Show PIN verification screen
         setShowPinVerification(true);
-        toast.info('Please enter your 6-digit PIN');
+        showInfo('Please enter your 6-digit PIN');
         return;
       }
 
@@ -93,7 +93,7 @@ const Login = () => {
       if (loginResult.employee && loginResult.employee.isAdmin) {
         // Check if PIN is set up
         if (!loginResult.employee.adminPin) {
-          toast.error('Admin PIN not configured. Please contact system administrator.');
+          showError('Admin PIN not configured. Please contact system administrator.');
           setError("Admin PIN not configured. Please contact system administrator.");
           return;
         }
@@ -108,7 +108,7 @@ const Login = () => {
         
         // Show PIN verification screen
         setShowPinVerification(true);
-        toast.info('Please enter your 6-digit PIN');
+        showInfo('Please enter your 6-digit PIN');
         return;
       }
 
@@ -123,13 +123,13 @@ const Login = () => {
       };
       localStorage.setItem('userRole', 'employee');
       localStorage.setItem('currentEmployee', JSON.stringify(employeeData));
-      toast.success(loginResult.message || 'Login successful');
+      showSuccess(loginResult.message || 'Login successful');
       navigate("/employee-dashboard");
 
     } catch (error) {
       console.error('Login error:', error);
       setError("Login failed. Please try again.");
-      toast.error("Login failed. Please try again.");
+      showError("Login failed. Please try again.");
     }
   };
 
@@ -154,7 +154,7 @@ const Login = () => {
 
       if (result.error || !result.success) {
         setError(result.message || result.error || 'Invalid PIN');
-        toast.error(result.message || result.error || 'Invalid PIN');
+        showError(result.message || result.error || 'Invalid PIN');
         setPinLoading(false);
         
         // Reset PIN input after failed attempt
@@ -172,7 +172,7 @@ const Login = () => {
       localStorage.setItem('currentEmployee', JSON.stringify(pendingAdminData.employee));
       
       // Show success message ONCE
-      toast.success('PIN verified successfully');
+      showSuccess('PIN verified successfully');
       
       // Hide PIN overlay and navigate
       setShowPinVerification(false);
@@ -187,7 +187,7 @@ const Login = () => {
     } catch (error) {
       console.error('PIN verification error:', error);
       setError("PIN verification failed. Please try again.");
-      toast.error("PIN verification failed. Please try again.");
+      showError("PIN verification failed. Please try again.");
       setPinLoading(false);
     }
   };
@@ -197,7 +197,7 @@ const Login = () => {
     setPendingAdminData(null);
     setPassword("");
     setError("");
-    toast.info('Login cancelled');
+    showInfo('Login cancelled');
   };
 
 

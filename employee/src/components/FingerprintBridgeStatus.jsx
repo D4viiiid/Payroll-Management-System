@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { showSuccess, showError, showInfo } from '../utils/toast';
 
 /**
  * Fingerprint Bridge Status Component
@@ -97,7 +97,7 @@ const FingerprintBridgeStatus = () => {
   const handleDownload = async () => {
     try {
       setDownloading(true);
-      toast.info('📦 Preparing download...');
+      showInfo('📦 Preparing download...');
 
       // ✅ CRITICAL FIX: Download from static public file instead of API
       // This works in production (Vercel) because public files are served as static assets
@@ -138,14 +138,14 @@ const FingerprintBridgeStatus = () => {
         console.log('🧹 Cleaned up download resources');
       }, 100);
 
-      toast.success('✅ Download complete! Check your Downloads folder', {
+      showSuccess('✅ Download complete! Check your Downloads folder', {
         autoClose: 5000
       });
       setShowInstructions(true);
 
     } catch (error) {
       console.error('❌ Download error:', error);
-      toast.error(`❌ Download failed: ${error.message}`, {
+      showError(`❌ Download failed: ${error.message}`, {
         autoClose: 10000
       });
     } finally {

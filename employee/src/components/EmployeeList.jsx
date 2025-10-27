@@ -6,6 +6,7 @@ import AdminHeader from './AdminHeader';
 import { optimizedMemo } from '../utils/reactOptimization';
 import { logger } from '../utils/logger';
 import biometricService from '../services/biometricService'; // ✅ Import bridge service
+import { showSuccess, showError, showConfirm } from '../utils/toast';
 import './Admin.responsive.css';
 
 // Memoized Employee Row Component for better performance
@@ -486,12 +487,18 @@ const handleFingerprintEnrollment = async () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this employee?')) {
+    const confirmed = await showConfirm('Are you sure you want to delete this employee?', {
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      confirmColor: '#ef4444' // Red for delete
+    });
+    
+    if (confirmed) {
       try {
         setLoading(true);
         const result = await employeeApi.delete(id);
         if (!result.error) {
-          alert('Employee deleted successfully!');
+          showSuccess('Employee deleted successfully!');
           // ✅ DON'T call fetchEmployees here - the event bus will handle it
           // The 'employee-deleted' event will trigger the event listener above
         } else {
@@ -536,21 +543,26 @@ const handleFingerprintEnrollment = async () => {
   // === RE-ENROLLMENT HANDLER (For Edit Mode) ===
   const handleReEnrollFingerprint = async () => {
     if (!editingEmployee) {
-      toast.error('No employee selected for re-enrollment');
+      showError('No employee selected for re-enrollment');
       return;
     }
 
     // Check enrollment count limit
     if (editingEmployee.fingerprintEnrollmentCount >= 3) {
-      toast.error('Maximum fingerprint enrollment limit (3) reached for this employee');
+      showError('Maximum fingerprint enrollment limit (3) reached for this employee');
       return;
     }
 
     // Confirm re-enrollment
-    const confirmed = window.confirm(
+    const confirmed = await showConfirm(
       `Re-enroll fingerprint for ${editingEmployee.firstName} ${editingEmployee.lastName}?\n\n` +
       `Current enrollments: ${editingEmployee.fingerprintEnrollmentCount || 0}/3\n\n` +
-      `This will replace the existing fingerprint template.`
+      `This will replace the existing fingerprint template.`,
+      {
+        confirmText: 'Re-Enroll',
+        cancelText: 'Cancel',
+        confirmColor: '#f59e0b' // Orange color for re-enrollment
+      }
     );
 
     if (!confirmed) return;
@@ -597,7 +609,7 @@ const handleFingerprintEnrollment = async () => {
       
       setFingerprintStep(2); // Success
       logger.log('✅ Fingerprint re-captured! Credentials remain unchanged.');
-      toast.success('✅ Fingerprint re-enrolled successfully! Click "Update Employee" to save.');
+      showSuccess('✅ Fingerprint re-enrolled successfully! Click "Update Employee" to save.');
       
       // Auto-submit the re-enrollment
       setTimeout(async () => {
@@ -618,7 +630,7 @@ const handleFingerprintEnrollment = async () => {
         userMessage = 'Fingerprint scan timed out. Please try again and place your finger firmly on the scanner.';
       }
       
-      toast.error('❌ Fingerprint Re-enrollment Failed:\n' + userMessage);
+      showError('❌ Fingerprint Re-enrollment Failed:\n' + userMessage);
       
       setShowReEnrollSection(false);
       setFingerprintStep(0);
@@ -630,12 +642,12 @@ const handleFingerprintEnrollment = async () => {
   // === SUBMIT RE-ENROLLMENT (Update existing employee with new fingerprint) ===
   const handleSubmitReEnrollment = async () => {
     if (!capturedFingerprintTemplate) {
-      toast.error('No fingerprint captured. Please enroll fingerprint first.');
+      showError('No fingerprint captured. Please enroll fingerprint first.');
       return;
     }
 
     if (!editingEmployee) {
-      toast.error('No employee selected');
+      showError('No employee selected');
       return;
     }
 
@@ -669,7 +681,7 @@ const handleFingerprintEnrollment = async () => {
         fingerprintEnrolled: true
       }));
 
-      toast.success(`Fingerprint re-enrolled successfully for ${editingEmployee.firstName} ${editingEmployee.lastName}!`);
+      showSuccess(`Fingerprint re-enrolled successfully for ${editingEmployee.firstName} ${editingEmployee.lastName}!`);
       
       // Update local form state
       setFormData(prev => ({
@@ -687,7 +699,7 @@ const handleFingerprintEnrollment = async () => {
       
     } catch (error) {
       logger.error('❌ Re-enrollment error:', error);
-      toast.error(error.message || 'Failed to re-enroll fingerprint');
+      showError(error.message || 'Failed to re-enroll fingerprint');
     } finally {
       setLoading(false);
     }

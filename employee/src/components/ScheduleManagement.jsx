@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { showSuccess, showError, showConfirm } from '../utils/toast';
 import './ScheduleManagement.css';
 
 const ScheduleManagement = () => {
@@ -90,7 +91,13 @@ const ScheduleManagement = () => {
   };
 
   const handleDeleteSchedule = async (scheduleId) => {
-    if (!window.confirm('Are you sure you want to delete this schedule?')) {
+    const confirmed = await showConfirm('Are you sure you want to delete this schedule?', {
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      confirmColor: '#ef4444'
+    });
+    
+    if (!confirmed) {
       return;
     }
 
@@ -98,7 +105,7 @@ const ScheduleManagement = () => {
     setError(null);
     try {
       await axios.delete(`${API_URL}/schedules/${scheduleId}`);
-      setSuccessMessage('Schedule deleted successfully!');
+      showSuccess('Schedule deleted successfully!');
       setSchedules([]);
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {

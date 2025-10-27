@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { showError } from '../utils/toast';
+import { showError, showSuccess } from '../utils/toast';
 import { FaFingerprint, FaSpinner, FaCheck, FaTimes, FaExclamationTriangle } from 'react-icons/fa';
 
 const BiometricLoginButton = ({ onSuccess, onError }) => {
@@ -64,7 +64,7 @@ const BiometricLoginButton = ({ onSuccess, onError }) => {
         localStorage.setItem('employee', JSON.stringify(data.employee));
         localStorage.setItem('isLoggedIn', 'true');
 
-        toast.success(data.message || 'Biometric login successful!');
+        showSuccess(data.message || 'Biometric login successful!');
 
         // Call success callback if provided
         if (onSuccess) {

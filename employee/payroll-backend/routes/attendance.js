@@ -75,6 +75,36 @@ const fixTimezoneForClient = (record) => {
   return fixed;
 };
 
+// ✅ HELPER FUNCTION: Calculate work hours between timeIn and timeOut
+// Excludes 1-hour lunch break (12:00 PM - 1:00 PM)
+// Returns total paid work hours
+const calculateWorkHours = (timeIn, timeOut) => {
+  if (!timeIn || !timeOut) return 0;
+  
+  const start = new Date(timeIn);
+  const end = new Date(timeOut);
+  
+  // Calculate total hours
+  const totalHours = (end - start) / (1000 * 60 * 60);
+  
+  // Get hours as decimal (e.g., 8.5 for 8:30)
+  const startHour = start.getHours() + (start.getMinutes() / 60);
+  const endHour = end.getHours() + (end.getMinutes() / 60);
+  
+  // Check if lunch break (12:00 PM - 1:00 PM) falls within work hours
+  const lunchStart = 12; // 12:00 PM
+  const lunchEnd = 13;   // 1:00 PM
+  
+  let workHours = totalHours;
+  
+  // Deduct 1 hour if worked through lunch
+  if (startHour < lunchEnd && endHour > lunchStart) {
+    workHours -= 1;
+  }
+  
+  return Math.max(0, workHours);
+};
+
 // ✅ AUTO-TIMEOUT LOGIC: Fill missing timeouts with 5PM to prevent salary inflation
 // RULES:
 // 1. Only fill if employee hasn't timed out WITHIN THE SAME DAY
@@ -105,16 +135,8 @@ const autoFillMissingTimeouts = (records) => {
       
       console.log(`⏰ AUTO-TIMEOUT: Employee ${record.employeeId || 'unknown'} on ${recordDateStr} - Setting timeout to 5:00 PM (timeIn was ${timeInDate.toLocaleTimeString('en-US', { hour12: true, timeZone: 'Asia/Manila' })})`);
       
-      // Calculate work hours (simple: 5PM - timeIn, minus 1 hour lunch)
-      const timeInHours = timeInDate.getHours() + (timeInDate.getMinutes() / 60);
-      const timeOutHours = 17; // 5PM
-      let workHours = timeOutHours - timeInHours;
-      
-      // Subtract 1 hour lunch if worked through lunch time (12-1PM)
-      if (timeInHours < 13 && timeOutHours > 12) {
-        workHours -= 1;
-      }
-      workHours = Math.max(0, workHours);
+      // Calculate work hours using helper function
+      const workHours = calculateWorkHours(timeInDate, autoTimeout);
       
       // Update the record with auto-filled timeout
       return {

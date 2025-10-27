@@ -12,12 +12,28 @@
   color: #ffffff !important;
 }
 
-/* ✅ FIX: Prevent hover effect on logout buttons */
-.sidebar-link.no-hover:hover,
-.nav-link.no-hover:hover,
-button.no-hover:hover {
+/* ✅ FIX: Prevent hover effect on logout buttons - HIGHEST SPECIFICITY */
+.sidebar-link.no-hover,
+.nav-link.no-hover,
+button.no-hover,
+button.nav-link.no-hover {
   background-color: transparent !important;
   background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.sidebar-link.no-hover:hover,
+.nav-link.no-hover:hover,
+button.no-hover:hover,
+button.nav-link.no-hover:hover,
+.no-hover:focus,
+.no-hover:active {
+  background-color: transparent !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 .sidebar-link.active,

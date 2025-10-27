@@ -219,10 +219,32 @@ const AttendancePage = () => {
       // Format time
       const formatTime = (dateValue) => {
         if (!dateValue) return '';
-        return new Date(dateValue).toLocaleTimeString('en-US', {
+        
+        // ✅ CRITICAL FIX #23: Handle timezone-naive datetime from Python
+        // Python stores time as Manila time (UTC+8) but without 'Z' timezone marker
+        // When parsed by JavaScript, it's treated as local time (varies by deployment environment)
+        // Solution: Always interpret as Manila time by appending +08:00 timezone
+        
+        let dateStr = dateValue;
+        
+        // If dateValue is a Date object, convert to ISO string
+        if (dateValue instanceof Date) {
+          dateStr = dateValue.toISOString();
+        }
+        
+        // If the string doesn't have timezone info, append Manila timezone (+08:00)
+        if (typeof dateStr === 'string' && !dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+          dateStr = dateStr + '+08:00';
+        }
+        
+        // Parse and format with Manila timezone
+        const date = new Date(dateStr);
+        
+        return date.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
-          hour12: true
+          hour12: true,
+          timeZone: 'Asia/Manila'
         });
       };
 
@@ -236,9 +258,22 @@ const AttendancePage = () => {
       // ✅ FALLBACK FIX: If record has both timeIn and timeOut but status is still 'present', 
       // this is old data that needs recalculation
       if (record.timeIn && record.timeOut && attendanceStatus === 'present') {
+        // Helper function to parse timezone-naive datetime from Python
+        const parseTimeWithTimezone = (dateValue) => {
+          let dateStr = dateValue;
+          if (dateValue instanceof Date) {
+            dateStr = dateValue.toISOString();
+          }
+          // Append Manila timezone if not present
+          if (typeof dateStr === 'string' && !dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+            dateStr = dateStr + '+08:00';
+          }
+          return new Date(dateStr);
+        };
+        
         // Calculate hours worked for fallback
-        const timeInDate = new Date(record.timeIn);
-        const timeOutDate = new Date(record.timeOut);
+        const timeInDate = parseTimeWithTimezone(record.timeIn);
+        const timeOutDate = parseTimeWithTimezone(record.timeOut);
         const diffMs = timeOutDate - timeInDate;
         const diffHours = diffMs / (1000 * 60 * 60);
         

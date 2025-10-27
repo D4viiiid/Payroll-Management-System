@@ -85,18 +85,40 @@ const EmployeeDashboard = () => {
       // Use the date field directly
       const date = record.date || record.timeIn;
       
-      // Format time in and time out
-      const timeIn = record.timeIn ? new Date(record.timeIn).toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      }) : '-';
+      // ✅ CRITICAL FIX #23: Handle timezone-naive datetime from Python
+      // Format time in and time out with Manila timezone correction
+      const formatTime = (dateValue) => {
+        if (!dateValue) return '-';
+        
+        // Python stores time as Manila time (UTC+8) but without 'Z' timezone marker
+        // When parsed by JavaScript, it's treated as local time (varies by deployment environment)
+        // Solution: Always interpret as Manila time by appending +08:00 timezone
+        
+        let dateStr = dateValue;
+        
+        // If dateValue is a Date object, convert to ISO string
+        if (dateValue instanceof Date) {
+          dateStr = dateValue.toISOString();
+        }
+        
+        // If the string doesn't have timezone info, append Manila timezone (+08:00)
+        if (typeof dateStr === 'string' && !dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+          dateStr = dateStr + '+08:00';
+        }
+        
+        // Parse and format with Manila timezone
+        const date = new Date(dateStr);
+        
+        return date.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: 'Asia/Manila'
+        });
+      };
       
-      const timeOut = record.timeOut ? new Date(record.timeOut).toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      }) : '-';
+      const timeIn = formatTime(record.timeIn);
+      const timeOut = formatTime(record.timeOut);
 
       // Determine status: use dayType if available, otherwise use status field, default to 'present' if time in exists
       let displayStatus = 'unknown';

@@ -110,7 +110,34 @@ def enroll_fingerprint(employee_data):
         if mongodb_uri:
             try:
                 log("\n💾 Storing fingerprint in MongoDB...")
-                client = MongoClient(mongodb_uri)
+                
+                # ✅ CRITICAL FIX BUG #24: Improved MongoDB connection with retry logic
+                max_retries = 3
+                retry_delay = 2
+                
+                for attempt in range(max_retries):
+                    try:
+                        client = MongoClient(
+                            mongodb_uri,
+                            serverSelectionTimeoutMS=20000,
+                            connectTimeoutMS=20000,
+                            socketTimeoutMS=20000,
+                            maxPoolSize=10,
+                            retryWrites=True,
+                            retryReads=True
+                        )
+                        # Test connection
+                        client.admin.command('ping')
+                        break
+                    except Exception as conn_err:
+                        if attempt < max_retries - 1:
+                            import time
+                            time.sleep(retry_delay)
+                            retry_delay *= 2
+                            continue
+                        else:
+                            raise conn_err
+                
                 db = client['employee_db']
                 employees = db['employees']
                 

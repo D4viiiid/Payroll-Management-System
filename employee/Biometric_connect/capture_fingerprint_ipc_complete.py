@@ -13,23 +13,52 @@ import os
 from pyzkfp import ZKFP2
 from pymongo import MongoClient
 from datetime import datetime
+import time
 
 def get_database_connection():
-    """Connect to MongoDB database"""
+    """Connect to MongoDB database with retry logic"""
     try:
         # Get MongoDB URI from environment or use default
         mongodb_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/employee_db')
 
-        # Connect to MongoDB
-        client = MongoClient(mongodb_uri, serverSelectionTimeoutMS=5000)
+        # ✅ CRITICAL FIX BUG #24: Increase timeout and add connection parameters
+        # Problem: 5-second timeout causes failures on slow networks (different devices/locations)
+        # Solution: Increase to 20 seconds, add retry logic, configure connection pooling
+        
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                # Connect to MongoDB with increased timeout and proper configuration
+                client = MongoClient(
+                    mongodb_uri,
+                    serverSelectionTimeoutMS=20000,  # Increased from 5s to 20s
+                    connectTimeoutMS=20000,          # Connection timeout
+                    socketTimeoutMS=20000,           # Socket timeout for operations
+                    maxPoolSize=10,                  # Connection pooling
+                    retryWrites=True,                # Retry failed writes
+                    retryReads=True                  # Retry failed reads
+                )
 
-        # Test connection
-        client.admin.command('ping')
+                # Test connection
+                client.admin.command('ping')
 
-        # Get database
-        db = client.employee_db
+                # Get database
+                db = client.employee_db
 
-        return db, client
+                return db, client
+                
+            except Exception as conn_err:
+                if attempt < max_retries - 1:
+                    # Not the last attempt - retry after delay
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    # Last attempt failed - raise error
+                    raise conn_err
+
     except Exception as e:
         return None, f"Database connection failed: {str(e)}"
 

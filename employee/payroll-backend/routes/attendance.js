@@ -22,6 +22,59 @@ const isMongoConnected = () => {
   return mongoConnected(); // Call the function to get actual connection state
 };
 
+// ✅ CRITICAL FIX BUG #24: Transform timezone-naive datetimes to Manila timezone ISO strings
+// Problem: MongoDB stores timezone-naive datetimes (e.g., "2025-10-27T17:47:16.055568")
+// When Mongoose converts to JSON, it adds 'Z' suffix, marking it as UTC
+// This causes 8-hour offset when displayed (17:47 UTC = 01:47 Manila next day)
+// Solution: Replace Date objects with ISO strings with Manila timezone marker (+08:00)
+const fixTimezoneForClient = (record) => {
+  if (!record) return record;
+  
+  // Helper to convert Date object to Manila timezone ISO string
+  const dateToManilaISO = (dateValue) => {
+    if (!dateValue) return null;
+    
+    // If already a string, check if it has timezone info
+    if (typeof dateValue === 'string') {
+      // If has 'Z' or timezone offset, it's already marked - leave as is
+      if (dateValue.endsWith('Z') || dateValue.includes('+') || dateValue.match(/-\d{2}:\d{2}$/)) {
+        return dateValue;
+      }
+      // No timezone info - append Manila timezone
+      return dateValue + '+08:00';
+    }
+    
+    // If it's a Date object, convert to ISO string without 'Z'
+    if (dateValue instanceof Date) {
+      // Get ISO string and remove the 'Z' suffix
+      const isoString = dateValue.toISOString();
+      // Remove 'Z' and append Manila timezone
+      return isoString.replace(/Z$/, '') + '+08:00';
+    }
+    
+    return dateValue;
+  };
+  
+  // Create a copy to avoid modifying original
+  const fixed = { ...record };
+  
+  // Fix timeIn and timeOut
+  if (fixed.timeIn) {
+    fixed.timeIn = dateToManilaISO(fixed.timeIn);
+  }
+  if (fixed.timeOut) {
+    fixed.timeOut = dateToManilaISO(fixed.timeOut);
+  }
+  if (fixed.date) {
+    fixed.date = dateToManilaISO(fixed.date);
+  }
+  if (fixed.time) {
+    fixed.time = dateToManilaISO(fixed.time);
+  }
+  
+  return fixed;
+};
+
 // Helper function to calculate work hours (excluding lunch break)
 // Lunch break: 12:00 PM - 12:59 PM (1 hour)
 const calculateWorkHours = (timeIn, timeOut) => {
@@ -242,8 +295,11 @@ router.get('/attendance', async (req, res) => {
                 .exec()
         ]);
 
+        // ✅ CRITICAL FIX BUG #24: Transform timezone-naive datetimes to Manila timezone ISO strings
+        const fixedResults = results.map(fixTimezoneForClient);
+
         // Build paginated response
-        const response = createPaginatedResponse(results, totalCount, paginationParams);
+        const response = createPaginatedResponse(fixedResults, totalCount, paginationParams);
 
         const endTime = Date.now();
         const totalTime = endTime - startTime;
@@ -454,8 +510,12 @@ router.get('/attendance/:employeeId', async (req, res) => {
     try {
         const attendance = await Attendance.find({
             employeeId: req.params.employeeId
-        }).sort({ date: -1, timeIn: -1, time: -1 });
-        res.json(attendance);
+        }).sort({ date: -1, timeIn: -1, time: -1 }).lean();
+        
+        // ✅ CRITICAL FIX BUG #24: Transform timezone-naive datetimes
+        const fixedAttendance = attendance.map(fixTimezoneForClient);
+        
+        res.json(fixedAttendance);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

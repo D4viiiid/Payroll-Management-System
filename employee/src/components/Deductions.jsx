@@ -4,6 +4,7 @@ import { getAllDeductions, getArchivedDeductions, createDeduction, deleteDeducti
 import { getAllEmployees } from "../services/employeeService";
 import { getCurrentSalaryRate } from "../services/salaryRateService"; // ✅ FIX ISSUE #2: Import salary rate service
 import { logger } from '../utils/logger';
+import { showSuccess, showError, showConfirm } from "../utils/toast"; // ✅ BUG #25 FIX
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import './Admin.responsive.css';
@@ -638,14 +639,19 @@ const Deduction = () => {
     return filterType !== '' || searchTerm !== '';
   };
 
-  // === ARCHIVE FUNCTION ===
+  // ✅ BUG #25 FIX: ARCHIVE FUNCTION with React Hot Toast
   const handleArchive = async (id) => {
     if (!id) {
-      alert('Error: Cannot archive - No ID provided');
+      showError('Cannot archive - No ID provided');
       return;
     }
     
-    if (window.confirm('Are you sure you want to archive this cash advance record?')) {
+    const confirmed = await showConfirm('Are you sure you want to archive this cash advance record?', {
+      confirmText: 'Archive',
+      confirmColor: '#8b5cf6', // Purple color
+    });
+    
+    if (confirmed) {
       try {
         setLoading(true);
         
@@ -666,27 +672,32 @@ const Deduction = () => {
         // ✅ FIX ISSUE #4: Bypass cache to force fresh data fetch
         await fetchDeductions(true); // true = bypass cache
         setError(null);
-        alert('Cash advance record archived successfully!');
+        showSuccess('Cash advance record archived successfully!');
         
       } catch (err) {
         logger.error('Archive error:', err);
         const errorMessage = err.message || 'Archive failed';
         setError(errorMessage);
-        alert(`Error: ${errorMessage}`);
+        showError(`Error: ${errorMessage}`);
       } finally {
         setLoading(false);
       }
     }
   };
 
-  // === RESTORE FROM ARCHIVE FUNCTION ===
+  // ✅ BUG #25 FIX: RESTORE FROM ARCHIVE FUNCTION with React Hot Toast
   const handleRestore = async (id) => {
     if (!id) {
-      alert('Error: Cannot restore - No ID provided');
+      showError('Cannot restore - No ID provided');
       return;
     }
     
-    if (window.confirm('Are you sure you want to restore this cash advance record?')) {
+    const confirmed = await showConfirm('Are you sure you want to restore this cash advance record?', {
+      confirmText: 'Restore',
+      confirmColor: '#10b981', // Green color
+    });
+    
+    if (confirmed) {
       try {
         setLoading(true);
         
@@ -707,13 +718,13 @@ const Deduction = () => {
         // ✅ FIX ISSUE #4: Bypass cache to force fresh data fetch
         await fetchDeductions(true); // true = bypass cache
         setError(null);
-        alert('Cash advance record restored successfully!');
+        showSuccess('Cash advance record restored successfully!');
         
       } catch (err) {
         logger.error('Restore error:', err);
         const errorMessage = err.message || 'Restore failed';
         setError(errorMessage);
-        alert(`Error: ${errorMessage}`);
+        showError(`Error: ${errorMessage}`);
       } finally {
         setLoading(false);
       }

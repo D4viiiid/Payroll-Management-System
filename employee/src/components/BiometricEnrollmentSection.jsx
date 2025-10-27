@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
+import { showSuccess, showError, showWarning, showInfo, showConfirm, dismissToast } from '../utils/toast'; // ✅ BUG #25 FIX
 import biometricService from '../services/biometricService';
 import { employeeApi } from '../services/apiService';
 
@@ -46,33 +47,33 @@ const BiometricEnrollmentSection = ({ employeeId, onEnrollmentComplete }) => {
       }
     } catch (error) {
       console.error('Error loading employee:', error);
-      toast.error('Failed to load employee data');
+      showError('Failed to load employee data');
     } finally {
       setLoading(false);
     }
   };
 
+  // ✅ BUG #25 FIX: Enroll fingerprint with React Hot Toast
   const handleEnrollFingerprint = async () => {
     if (fingerprints.length >= 1 && fingerprints[0]?.enrolled) {
-      toast.warning('Fingerprint already enrolled for this employee.');
+      showWarning('Fingerprint already enrolled for this employee.');
       return;
     }
 
     if (deviceStatus !== 'connected') {
-      toast.error('Bridge server not connected. Please run START_BRIDGE.bat first.');
+      showError('Bridge server not connected. Please run START_BRIDGE.bat first.');
       return;
     }
 
     if (!employeeData) {
-      toast.error('Employee data not loaded');
+      showError('Employee data not loaded');
       return;
     }
 
     try {
       setEnrolling(true);
-      toast.info('👆 Please scan your finger 3 times on the scanner...', { 
-        autoClose: false, 
-        toastId: 'fingerprint-scan' 
+      const loadingToastId = showInfo('👆 Please scan your finger 3 times on the scanner...', { 
+        duration: 0 // Don't auto-dismiss
       });
 
       // Call bridge server to enroll fingerprint
@@ -83,29 +84,34 @@ const BiometricEnrollmentSection = ({ employeeId, onEnrollmentComplete }) => {
         email: employeeData.email
       });
 
-      toast.dismiss('fingerprint-scan');
+      dismissToast(loadingToastId);
 
       if (data.success) {
-        toast.success('✅ Fingerprint enrolled successfully!');
+        showSuccess('✅ Fingerprint enrolled successfully!');
         await loadEmployeeData();
         if (onEnrollmentComplete) {
           onEnrollmentComplete(data);
         }
       } else {
-        toast.error(data.message || 'Failed to enroll fingerprint');
+        showError(data.message || 'Failed to enroll fingerprint');
       }
     } catch (error) {
       // ✅ FIX: Better error handling without console spam
-      toast.dismiss('fingerprint-scan');
       const errorMsg = error.response?.data?.message || error.message || 'Failed to connect to bridge server';
-      toast.error('Error: ' + errorMsg);
+      showError('Error: ' + errorMsg);
     } finally {
       setEnrolling(false);
     }
   };
 
+  // ✅ BUG #25 FIX: Delete fingerprint with React Hot Toast confirm dialog
   const handleDeleteFingerprint = async (index) => {
-    if (!window.confirm('Are you sure you want to delete this fingerprint?')) {
+    const confirmed = await showConfirm('Are you sure you want to delete this fingerprint?', {
+      confirmText: 'Delete',
+      confirmColor: '#ef4444', // Red color
+    });
+    
+    if (!confirmed) {
       return;
     }
 
@@ -117,13 +123,13 @@ const BiometricEnrollmentSection = ({ employeeId, onEnrollmentComplete }) => {
       const data = await response.json();
 
       if (data.success) {
-        toast.success('Fingerprint deleted successfully');
+        showSuccess('Fingerprint deleted successfully');
       } else {
-        toast.error(data.message || 'Failed to delete fingerprint');
+        showError(data.message || 'Failed to delete fingerprint');
       }
     } catch (error) {
       // ✅ FIX: Simplified error message
-      toast.error('Error deleting fingerprint');
+      showError('Error deleting fingerprint');
     }
   };
 

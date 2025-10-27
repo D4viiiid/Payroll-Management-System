@@ -54,9 +54,13 @@ def enroll_fingerprint(employee_data):
         for i in range(3):
             log(f"\n🔍 Scan {i+1}/3 - Place your finger on the scanner...")
             
+            # ✅ BUG #25 FIX: Extended timeout with proper polling delays
             # Capture fingerprint with timeout and error handling
             capture_attempts = 0
-            max_attempts = 100  # Maximum attempts per scan (about 10 seconds)
+            max_attempts = 300  # Maximum attempts per scan (30 seconds with 0.1s delays)
+            
+            # Import time module at the top of the loop
+            import time
             
             while capture_attempts < max_attempts:
                 capture_attempts += 1
@@ -67,6 +71,8 @@ def enroll_fingerprint(employee_data):
                     
                     if result is None:
                         # Device returned None - continue waiting
+                        # ✅ CRITICAL FIX: Add delay to prevent tight CPU polling
+                        time.sleep(0.1)  # 100ms delay between attempts
                         continue
                     
                     tmp, img = result
@@ -76,13 +82,16 @@ def enroll_fingerprint(employee_data):
                         log(f"✅ Scan {i+1}/3 captured successfully!")
                         if i < 2:  # Don't wait after last scan
                             log("   Remove your finger and wait 2 seconds...")
-                            import time
                             time.sleep(2)
                         break
+                    else:
+                        # No valid template - add small delay before retry
+                        time.sleep(0.1)
                     
                 except (TypeError, ValueError) as e:
                     # Handle unpacking errors gracefully
                     log(f"⚠️  Capture attempt {capture_attempts}: {str(e)}")
+                    time.sleep(0.1)  # Add delay before retry
                     continue
                 except Exception as e:
                     log(f"❌ Unexpected error during capture: {str(e)}")

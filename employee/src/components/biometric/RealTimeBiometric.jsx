@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
+import { showError } from '../../utils/toast'; // ✅ BUG #25 FIX
 import './biometric.css';
 
 const RealTimeBiometric = ({ employee, onEnrollmentComplete, onCredentialsGenerated }) => {
@@ -88,14 +89,15 @@ const RealTimeBiometric = ({ employee, onEnrollmentComplete, onCredentialsGenera
     }
   };
 
+  // ✅ BUG #25 FIX: Enroll employee with React Hot Toast
   const enrollEmployee = async () => {
     if (!employee) {
-      alert('Please select an employee first');
+      showError('Please select an employee first');
       return;
     }
 
     if (!isConnected) {
-      alert('Please connect to biometric device first');
+      showError('Please connect to biometric device first');
       return;
     }
 

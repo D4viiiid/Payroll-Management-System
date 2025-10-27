@@ -1,5 +1,6 @@
 import React from "react";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { Toaster } from 'react-hot-toast'; // ✅ BUG #25 FIX: React Hot Toast
 import EmployeeList from './components/EmployeeList';
 import './style.css';
 
@@ -73,7 +74,57 @@ const router = createBrowserRouter([
 });
 
 function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      {/* ✅ BUG #25 FIX: React Hot Toast configuration */}
+      <Toaster
+        position="top-right"
+        reverseOrder={false}
+        gutter={8}
+        toastOptions={{
+          // Default options for all toasts
+          duration: 4000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+            padding: '16px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '500',
+          },
+          // Success toast styling
+          success: {
+            duration: 3000,
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+            style: {
+              background: '#10b981',
+            },
+          },
+          // Error toast styling
+          error: {
+            duration: 5000,
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+            style: {
+              background: '#ef4444',
+            },
+          },
+          // Loading toast styling
+          loading: {
+            style: {
+              background: '#3b82f6',
+            },
+          },
+        }}
+      />
+      <RouterProvider router={router} />
+    </>
+  );
 }
 
 export default App;

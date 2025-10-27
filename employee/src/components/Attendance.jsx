@@ -5,6 +5,7 @@ import { getCurrentSalaryRate } from "../services/salaryRateService";
 import { useDebounce } from "../utils/debounce";
 import { logger } from "../utils/logger";
 import { optimizedMemo } from "../utils/reactOptimization";
+import { showSuccess, showError, showConfirm } from "../utils/toast"; // ✅ BUG #25 FIX
 import AdminSidebar from "./AdminSidebar";
 import AdminHeader from "./AdminHeader";
 import "./Admin.responsive.css";
@@ -919,9 +920,14 @@ const AttendancePage = () => {
     return 'Filtered Attendance Records';
   };
 
-  // Archive function
+  // ✅ BUG #25 FIX: Archive function with React Hot Toast
   const handleArchive = async (recordId) => {
-    if (window.confirm('Are you sure you want to archive this attendance record?')) {
+    const confirmed = await showConfirm('Are you sure you want to archive this attendance record?', {
+      confirmText: 'Archive',
+      confirmColor: '#8b5cf6', // Purple color
+    });
+    
+    if (confirmed) {
       try {
         const response = await fetch(`/api/attendance/${recordId}/archive`, {
           method: 'PATCH',
@@ -939,20 +945,26 @@ const AttendancePage = () => {
           );
           setAllAttendanceData(updatedData);
           logger.log('✅ Attendance record archived successfully');
+          showSuccess('Attendance record archived successfully');
         } else {
           logger.error('❌ Failed to archive attendance record');
-          alert('Failed to archive attendance record');
+          showError('Failed to archive attendance record');
         }
       } catch (error) {
         logger.error('❌ Error archiving attendance:', error);
-        alert('Error archiving attendance record');
+        showError('Error archiving attendance record');
       }
     }
   };
 
-  // Restore from archive function
+  // ✅ BUG #25 FIX: Restore from archive function with React Hot Toast
   const handleRestore = async (recordId) => {
-    if (window.confirm('Are you sure you want to restore this attendance record?')) {
+    const confirmed = await showConfirm('Are you sure you want to restore this attendance record?', {
+      confirmText: 'Restore',
+      confirmColor: '#10b981', // Green color
+    });
+    
+    if (confirmed) {
       try {
         const response = await fetch(`/api/attendance/${recordId}/restore`, {
           method: 'PATCH',
@@ -970,13 +982,14 @@ const AttendancePage = () => {
           );
           setAllAttendanceData(updatedData);
           logger.log('✅ Attendance record restored successfully');
+          showSuccess('Attendance record restored successfully');
         } else {
           logger.error('❌ Failed to restore attendance record');
-          alert('Failed to restore attendance record');
+          showError('Failed to restore attendance record');
         }
       } catch (error) {
         logger.error('❌ Error restoring attendance:', error);
-        alert('Error restoring attendance record');
+        showError('Error restoring attendance record');
       }
     }
   };

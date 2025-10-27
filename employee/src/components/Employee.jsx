@@ -6,6 +6,7 @@ import biometricService from '../services/biometricService'; // ✅ BUG #15 FIX:
 import BiometricEnrollmentSection from './BiometricEnrollmentSection';
 import FingerprintBridgeStatus from './FingerprintBridgeStatus';
 import { logger } from '../utils/logger';
+import { showSuccess, showError, showConfirm } from "../utils/toast"; // ✅ BUG #25 FIX
 import './Admin.responsive.css';
 
 const Employees = () => {
@@ -126,6 +127,7 @@ const Employees = () => {
     setShowDeleteConfirm(true);
   };
 
+  // ✅ BUG #25 FIX: Delete confirm with React Hot Toast
   const handleDeleteConfirm = async () => {
     try {
       // ✅ FIX: Use centralized API service for deletion to trigger events
@@ -139,10 +141,10 @@ const Employees = () => {
       // No need to manually update state here
       setShowDeleteConfirm(false);
       setEmployeeToDelete(null);
-      alert('Employee deleted successfully!');
+      showSuccess('Employee deleted successfully!');
     } catch (error) {
       logger.error('Error deleting employee:', error);
-      alert('Error deleting employee: ' + error.message);
+      showError('Error deleting employee: ' + error.message);
     }
   };
 

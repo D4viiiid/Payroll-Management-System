@@ -20,14 +20,16 @@ console.log('   EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? '***SET (' + proc
 console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
 console.log('   MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
 
-// 🔄 Force Vercel redeployment - October 24, 2025 05:20 UTC
-// CRITICAL: This deployment MUST include:
-// - Fixed attendance stats (totalPresent = ALL who timed in, absent = total - present)
-// - Public salary rate history endpoint (no auth required for GET /history)
-console.log('✅ Backend v1.0.4 - CRITICAL BACKEND REDEPLOY: Stats logic + Auth fixes');
+// 🔄 Force Vercel redeployment - October 29, 2025 04:55 UTC
+// CRITICAL v1.0.6: This deployment MUST include:
+// - Fixed archive employee 500 error (using updateOne instead of findByIdAndUpdate)
+// - Fixed salary sync checking dayType instead of status
+// - Fixed manual salary creation with proper validation
+console.log('✅ Backend v1.0.6 - CRITICAL FIXES: Archive + Salary Sync + Attendance Matching');
 console.log('⏰ Deployment Timestamp:', new Date().toISOString());
-console.log('📊 Stats endpoint MUST return correct absent count (9 if no one timed in)');
-console.log('🔐 Salary rate /history endpoint MUST be publicly accessible');
+console.log('� Archive MUST use updateOne to bypass Mongoose middleware');
+console.log('💰 Salary sync MUST check dayType field (Half Day, Full Day, Overtime)');
+console.log('✅ Manual salary creation MUST validate timeOut and dayType');
 
 // Now import everything else AFTER env vars are loaded
 import helmet from 'helmet';

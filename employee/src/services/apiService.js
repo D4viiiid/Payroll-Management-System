@@ -519,6 +519,131 @@ export const payrollApi = {
   }
 };
 
+// ✅ NEW: Cash Advance API functions
+export const cashAdvanceApi = {
+  // Get all cash advances
+  getAll: async () => {
+    try {
+      const data = await fetchApi(`${BACKEND_API_URL}/cash-advance`);
+      if (!data.error) {
+        eventBus.emit('cashAdvance-loaded', data);
+      }
+      return data;
+    } catch (error) {
+      return handleApiError(error, 'Failed to fetch cash advances');
+    }
+  },
+
+  // Get cash advances for specific employee
+  getByEmployeeId: async (employeeId) => {
+    try {
+      const data = await fetchApi(`${BACKEND_API_URL}/cash-advance?employee=${employeeId}`);
+      if (!data.error) {
+        eventBus.emit('employeeCashAdvance-loaded', data);
+      }
+      return data;
+    } catch (error) {
+      return handleApiError(error, 'Failed to fetch employee cash advances');
+    }
+  },
+
+  // Create new cash advance request
+  create: async (cashAdvanceData) => {
+    try {
+      const data = await fetchApi(`${BACKEND_API_URL}/cash-advance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cashAdvanceData)
+      });
+
+      if (!data.error) {
+        eventBus.emit('cashAdvance-created', data);
+        showSuccess('Cash advance request created successfully!');
+      }
+
+      return data;
+    } catch (error) {
+      return handleApiError(error, 'Failed to create cash advance request');
+    }
+  },
+
+  // Update cash advance
+  update: async (id, updates) => {
+    try {
+      const data = await fetchApi(`${BACKEND_API_URL}/cash-advance/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+
+      if (!data.error) {
+        eventBus.emit('cashAdvance-updated', data);
+        showSuccess('Cash advance updated successfully!');
+      }
+
+      return data;
+    } catch (error) {
+      return handleApiError(error, 'Failed to update cash advance');
+    }
+  },
+
+  // Approve cash advance
+  approve: async (id) => {
+    try {
+      const data = await fetchApi(`${BACKEND_API_URL}/cash-advance/${id}/approve`, {
+        method: 'POST'
+      });
+
+      if (!data.error) {
+        eventBus.emit('cashAdvance-approved', data);
+        showSuccess('Cash advance approved successfully!');
+      }
+
+      return data;
+    } catch (error) {
+      return handleApiError(error, 'Failed to approve cash advance');
+    }
+  },
+
+  // Reject cash advance
+  reject: async (id, reason) => {
+    try {
+      const data = await fetchApi(`${BACKEND_API_URL}/cash-advance/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      });
+
+      if (!data.error) {
+        eventBus.emit('cashAdvance-rejected', data);
+        showSuccess('Cash advance rejected');
+      }
+
+      return data;
+    } catch (error) {
+      return handleApiError(error, 'Failed to reject cash advance');
+    }
+  },
+
+  // Delete cash advance
+  delete: async (id) => {
+    try {
+      const data = await fetchApi(`${BACKEND_API_URL}/cash-advance/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (!data.error) {
+        eventBus.emit('cashAdvance-deleted', { id });
+        showSuccess('Cash advance deleted successfully!');
+      }
+
+      return data;
+    } catch (error) {
+      return handleApiError(error, 'Failed to delete cash advance');
+    }
+  }
+};
+
 // Fingerprint API functions
 export const fingerprintApi = {
   // Check if fingerprint service is available
@@ -609,6 +734,7 @@ export default {
   attendance: attendanceApi,
   salary: salaryApi,
   payroll: payrollApi,
+  cashAdvance: cashAdvanceApi,
   fingerprint: fingerprintApi,
   events: eventBus,
   startRealTimeUpdates,

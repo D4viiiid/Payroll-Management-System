@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { FaUser, FaCalendarAlt, FaMoneyBillWave, FaMinusCircle, FaClock, FaSignOutAlt, FaIdCard, FaEnvelope, FaBriefcase, FaDollarSign, FaPhone, FaMapMarkerAlt, FaVenusMars, FaBirthdayCake, FaPrint, FaHistory, FaEye, FaTimes, FaLock, FaCamera } from "react-icons/fa";
-import { employeeApi, attendanceApi, salaryApi, payrollApi, eventBus } from "../services/apiService";
+import { employeeApi, attendanceApi, salaryApi, payrollApi, cashAdvanceApi, eventBus } from "../services/apiService";
 import { showSuccess, showError, showInfo } from '../utils/toast';
 import { logger } from '../utils/logger';
 import { compressImage, validateImageFile, formatFileSize } from '../utils/imageOptimization';
@@ -126,6 +126,7 @@ const EmployeeDashboard = () => {
   const [attendance, setAttendance] = useState([]);
   const [transformedAttendance, setTransformedAttendance] = useState([]);
   const [payroll, setPayroll] = useState([]);
+  const [cashAdvances, setCashAdvances] = useState([]); // ✅ NEW: Cash advances state
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
   const [dateFilter, setDateFilter] = useState('');
@@ -988,6 +989,19 @@ const EmployeeDashboard = () => {
           if (!payrollResult.error) {
             setPayroll(Array.isArray(payrollResult) ? payrollResult : []);
           }
+
+          // ✅ NEW: Fetch cash advances for this employee
+          logger.log('💰 Fetching cash advances for employee:', freshEmployeeData.employeeId);
+          const cashAdvanceResult = await cashAdvanceApi.getByEmployeeId(freshEmployeeData._id);
+          if (!cashAdvanceResult.error) {
+            const cashAdvanceData = Array.isArray(cashAdvanceResult) ? cashAdvanceResult : 
+                                   (cashAdvanceResult.data || []);
+            logger.log('✅ Cash advances fetched:', cashAdvanceData.length, 'records');
+            setCashAdvances(cashAdvanceData);
+          } else {
+            logger.error('❌ Failed to fetch cash advances:', cashAdvanceResult.error);
+            setCashAdvances([]);
+          }
         } else {
           logger.error('❌ Failed to fetch fresh employee data, falling back to localStorage');
           setEmployee(employeeData);
@@ -1009,6 +1023,19 @@ const EmployeeDashboard = () => {
           const payrollResult = await payrollApi.getByEmployeeId(employeeData.employeeId);
           if (!payrollResult.error) {
             setPayroll(Array.isArray(payrollResult) ? payrollResult : []);
+          }
+
+          // ✅ NEW: Fetch cash advances for this employee
+          logger.log('💰 Fetching cash advances for employee (fallback):', employeeData.employeeId);
+          const cashAdvanceResult = await cashAdvanceApi.getByEmployeeId(employeeData._id);
+          if (!cashAdvanceResult.error) {
+            const cashAdvanceData = Array.isArray(cashAdvanceResult) ? cashAdvanceResult : 
+                                   (cashAdvanceResult.data || []);
+            logger.log('✅ Cash advances fetched (fallback):', cashAdvanceData.length, 'records');
+            setCashAdvances(cashAdvanceData);
+          } else {
+            logger.error('❌ Failed to fetch cash advances (fallback):', cashAdvanceResult.error);
+            setCashAdvances([]);
           }
         }
 
@@ -1149,7 +1176,7 @@ const EmployeeDashboard = () => {
   }
 
   // Get filtered data for each tab
-  const filteredDeductions = getFilteredData(employee?.deductions || [], 'deductions');
+  const filteredDeductions = getFilteredData(cashAdvances || [], 'deductions'); // ✅ FIX: Use cashAdvances state instead of employee.deductions
   const filteredAttendance = getFilteredData(attendance || [], 'attendance');
   const filteredPayroll = getFilteredData(payroll || [], 'payroll');
 

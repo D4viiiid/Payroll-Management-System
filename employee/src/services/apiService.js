@@ -457,20 +457,12 @@ export const payrollApi = {
   getAll: async (page = 1, limit = 1000) => {
     const cacheKey = createCacheKey(`${BACKEND_API_URL}/payrolls`, { page, limit });
     
-    // Try to get from cache first
-    const cached = requestCache.get(cacheKey);
-    if (cached && !cached.error) {
-      logger.log('✅ Payroll data served from cache');
-      return cached;
-    }
-
-    // Use deduplicator for consistency
+    // ✅ FIX: Use requestDeduplicator.dedupe instead of undefined requestCache
     const fetchFn = async () => await fetchApi(`${BACKEND_API_URL}/payrolls?page=${page}&limit=${limit}`);
-    const data = await requestDeduplicator.fetch(cacheKey, fetchFn);
+    const data = await requestDeduplicator.dedupe(cacheKey, fetchFn, 10000);
     
-    // Cache the result
-    if (data && !data.error) {
-      requestCache.set(cacheKey, data);
+    if (!data.error) {
+      eventBus.emit('payroll-updated', data);
     }
     
     return data;
@@ -478,20 +470,15 @@ export const payrollApi = {
 
   // Get payroll by employee ID
   getByEmployeeId: async (employeeId) => {
-    const cacheKey = createCacheKey(`${BACKEND_API_URL}/payrolls/employee/${employeeId}`);
-    
-    // Try to get from cache first
-    const cached = requestCache.get(cacheKey);
-    if (cached && !cached.error) {
-      logger.log('✅ Employee payroll data served from cache');
-      return cached;
-    }
-
+    // ✅ FIX: Always fetch fresh payroll data for employee (no caching)
+    // Payroll data is critical and should always be up-to-date
     const data = await fetchApi(`${BACKEND_API_URL}/payrolls?employeeId=${employeeId}`);
     
-    // Cache the result
-    if (data && !data.error) {
-      requestCache.set(cacheKey, data);
+    if (!data.error) {
+      logger.log('✅ Employee payroll data fetched:', data);
+      eventBus.emit('employee-payroll-updated', data);
+    } else {
+      logger.error('❌ Error fetching employee payroll:', data.error);
     }
     
     return data;

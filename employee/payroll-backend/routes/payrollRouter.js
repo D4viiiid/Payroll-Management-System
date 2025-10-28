@@ -47,8 +47,18 @@ const router = express.Router();
  */
 router.get('/', async (req, res) => {
   try {
+    const { employeeId } = req.query;
+    
+    // ✅ FIX: Build query object with optional employeeId filter
+    let query = { archived: { $ne: true } };
+    
+    // ✅ If employeeId is provided, add it to the query
+    if (employeeId) {
+      query.employeeId = employeeId;
+    }
+    
     // ✅ PERFORMANCE FIX: Optimized with lean() and field selection
-    const payrolls = await Payroll.find({ archived: { $ne: true } })
+    const payrolls = await Payroll.find(query)
       .populate('employee', 'firstName lastName employeeId email contactNumber status hireDate')
       .select('-__v') // Exclude version key
       .sort({ createdAt: -1 })

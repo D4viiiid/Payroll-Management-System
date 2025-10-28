@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { FaUser, FaCalendarAlt, FaMoneyBillWave, FaMinusCircle, FaClock, FaSignOutAlt, FaIdCard, FaEnvelope, FaBriefcase, FaDollarSign, FaPhone, FaMapMarkerAlt, FaVenusMars, FaBirthdayCake, FaPrint, FaHistory, FaEye, FaTimes, FaLock, FaCamera } from "react-icons/fa";
-import { employeeApi, attendanceApi, salaryApi, eventBus } from "../services/apiService";
+import { employeeApi, attendanceApi, salaryApi, payrollApi, eventBus } from "../services/apiService";
 import { showSuccess, showError, showInfo } from '../utils/toast';
 import { logger } from '../utils/logger';
 import { compressImage, validateImageFile, formatFileSize } from '../utils/imageOptimization';
@@ -983,12 +983,10 @@ const EmployeeDashboard = () => {
             setTransformedAttendance(transformed);
           }
 
-          // Fetch payroll data (assuming there's an endpoint to get payroll by employee ID)
-          // For now, we'll fetch all payroll and filter by employee ID
-          const payrollResult = await salaryApi.getAll();
+          // Fetch payroll data for this employee
+          const payrollResult = await payrollApi.getByEmployeeId(freshEmployeeData.employeeId);
           if (!payrollResult.error) {
-            const employeePayroll = payrollResult.filter(p => p.employeeId === freshEmployeeData.employeeId);
-            setPayroll(employeePayroll);
+            setPayroll(Array.isArray(payrollResult) ? payrollResult : []);
           }
         } else {
           logger.error('❌ Failed to fetch fresh employee data, falling back to localStorage');
@@ -1007,11 +1005,10 @@ const EmployeeDashboard = () => {
             setTransformedAttendance(transformed);
           }
 
-          // Fetch payroll data
-          const payrollResult = await salaryApi.getAll();
+          // Fetch payroll data for this employee
+          const payrollResult = await payrollApi.getByEmployeeId(employeeData.employeeId);
           if (!payrollResult.error) {
-            const employeePayroll = payrollResult.filter(p => p.employeeId === employeeData.employeeId);
-            setPayroll(employeePayroll);
+            setPayroll(Array.isArray(payrollResult) ? payrollResult : []);
           }
         }
 
@@ -2014,7 +2011,7 @@ const EmployeeDashboard = () => {
                                     onClick={() => handleSort('salary')}
                                     className="flex items-center gap-1 text-white hover:text-blue-200 focus:outline-none"
                                   >
-                                    Salary
+                                    Gross Salary
                                     {sortConfig.key === 'salary' && (
                                       <span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
                                     )}
@@ -2042,7 +2039,6 @@ const EmployeeDashboard = () => {
                                     )}
                                   </button>
                                 </th>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider">Actions</th>
                               </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
@@ -2050,30 +2046,34 @@ const EmployeeDashboard = () => {
                                 <tr key={payroll._id} className="hover:bg-pink-50 transition-colors duration-200">
                                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-semibold">
-                                    {payroll.period}
+                                    {payroll.period || `${formatDate(payroll.startDate)} - ${formatDate(payroll.endDate)}`}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold">
-                                    {formatCurrency(payroll.salary)}
+                                    {formatCurrency(payroll.totalSalary || payroll.salary || 0)}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-semibold">
-                                    -{formatCurrency(payroll.deductions)}
+                                    -{formatCurrency(payroll.totalDeductions || payroll.deductions || 0)}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-semibold">
-                                    {formatCurrency(payroll.netSalary)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                    <button
-                                      onClick={() => handleViewPayrollDetails(payroll)}
-                                      className="btn btn-sm d-flex align-items-center gap-1"
-                                      style={{ backgroundColor: '#f06a98', color: 'white', border: 'none' }}
-                                    >
-                                      <FaEye />
-                                      View
-                                    </button>
+                                    {formatCurrency(payroll.netSalary || 0)}
                                   </td>
                                 </tr>
                               ))}
                             </tbody>
+                            <tfoot className="bg-gray-50">
+                              <tr>
+                                <td colSpan="2" className="px-6 py-4 text-right font-semibold text-gray-900">Totals:</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-green-600 font-semibold">
+                                  {formatCurrency(filteredPayroll.reduce((sum, p) => sum + (p.totalSalary || p.salary || 0), 0))}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-red-600 font-semibold">
+                                  -{formatCurrency(filteredPayroll.reduce((sum, p) => sum + (p.totalDeductions || p.deductions || 0), 0))}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-blue-600 font-semibold">
+                                  {formatCurrency(filteredPayroll.reduce((sum, p) => sum + (p.netSalary || 0), 0))}
+                                </td>
+                              </tr>
+                            </tfoot>
                           </table>
                         </div>
                       )}

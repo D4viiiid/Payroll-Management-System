@@ -451,6 +451,87 @@ export const salaryApi = {
   }
 };
 
+// Payroll API functions
+export const payrollApi = {
+  // Get all payroll records
+  getAll: async (page = 1, limit = 1000) => {
+    const cacheKey = createCacheKey(`${BACKEND_API_URL}/payrolls`, { page, limit });
+    
+    // Try to get from cache first
+    const cached = requestCache.get(cacheKey);
+    if (cached && !cached.error) {
+      logger.log('✅ Payroll data served from cache');
+      return cached;
+    }
+
+    // Use deduplicator for consistency
+    const fetchFn = async () => await fetchApi(`${BACKEND_API_URL}/payrolls?page=${page}&limit=${limit}`);
+    const data = await requestDeduplicator.fetch(cacheKey, fetchFn);
+    
+    // Cache the result
+    if (data && !data.error) {
+      requestCache.set(cacheKey, data);
+    }
+    
+    return data;
+  },
+
+  // Get payroll by employee ID
+  getByEmployeeId: async (employeeId) => {
+    const cacheKey = createCacheKey(`${BACKEND_API_URL}/payrolls/employee/${employeeId}`);
+    
+    // Try to get from cache first
+    const cached = requestCache.get(cacheKey);
+    if (cached && !cached.error) {
+      logger.log('✅ Employee payroll data served from cache');
+      return cached;
+    }
+
+    const data = await fetchApi(`${BACKEND_API_URL}/payrolls?employeeId=${employeeId}`);
+    
+    // Cache the result
+    if (data && !data.error) {
+      requestCache.set(cacheKey, data);
+    }
+    
+    return data;
+  },
+
+  // Calculate payroll
+  calculate: async (payrollData) => {
+    const data = await fetchApi(`${BACKEND_API_URL}/payrolls/calculate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payrollData)
+    });
+
+    if (!data.error) {
+      // Clear cache
+      requestDeduplicator.clearAll();
+      eventBus.emit('payroll-calculated', data);
+    }
+
+    return data;
+  },
+
+  // Create payroll record
+  create: async (payrollData) => {
+    const data = await fetchApi(`${BACKEND_API_URL}/payrolls`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payrollData)
+    });
+
+    if (!data.error) {
+      // Clear cache
+      requestDeduplicator.clearAll();
+      eventBus.emit('payroll-created', data);
+    }
+
+    return data;
+  }
+};
+
 // Fingerprint API functions
 export const fingerprintApi = {
   // Check if fingerprint service is available
@@ -540,6 +621,7 @@ export default {
   employee: employeeApi,
   attendance: attendanceApi,
   salary: salaryApi,
+  payroll: payrollApi,
   fingerprint: fingerprintApi,
   events: eventBus,
   startRealTimeUpdates,

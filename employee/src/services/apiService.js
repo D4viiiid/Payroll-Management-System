@@ -212,7 +212,42 @@ export const employeeApi = {
     return data;
   },
   
-  // Delete employee
+  // ✅ NEW: Archive employee (soft delete)
+  archive: async (id) => {
+    console.log('📁 apiService.archive: Starting employee archiving for ID:', id);
+    const data = await fetchApi(`${BACKEND_API_URL}/employees/${id}/archive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (!data.error) {
+      // ✅ CRITICAL FIX: Clear ALL possible employee list cache variations
+      requestDeduplicator.clearAll(); // Clear everything to be safe
+      
+      console.log('🎯 apiService.archive: About to emit employee-archived event for ID:', id);
+      console.log('🔥 EVENT BUS STATE:', eventBus.events);
+      
+      // ✅ Emit event BEFORE fetching to ensure components are ready
+      eventBus.emit('employee-archived', { id });
+      console.log('✅ apiService.archive: Event employee-archived emitted for ID:', id);
+      
+      // ✅ ADDITIONAL: Also trigger a manual refresh via employees-updated event
+      setTimeout(async () => {
+        console.log('⏰ apiService.archive: Triggering delayed refresh...');
+        const freshData = await fetchApi(`${BACKEND_API_URL}/employees?page=1&limit=50`);
+        if (!freshData.error) {
+          eventBus.emit('employees-updated', freshData);
+          console.log('✅ apiService.archive: Delayed employees-updated event emitted');
+        }
+      }, 100);
+    } else {
+      console.error('❌ apiService.archive: Error archiving employee:', data.error);
+    }
+
+    return data;
+  },
+
+  // Delete employee (deprecated - use archive instead)
   delete: async (id) => {
     console.log('🗑️ apiService.delete: Starting employee deletion for ID:', id);
     const data = await fetchApi(`${BACKEND_API_URL}/employees/${id}`, {

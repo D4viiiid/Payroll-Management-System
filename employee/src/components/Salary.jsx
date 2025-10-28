@@ -625,12 +625,20 @@ const Salary = () => {
       const attendanceRecords = Array.isArray(attendanceResult) ? attendanceResult : 
                                (attendanceResult.data || attendanceResult.attendance || []);
       
+      console.log(`📋 Total attendance records fetched: ${attendanceRecords.length}`);
+      
       // Find attendance record matching employee ID and date
       const attendanceDateOnly = getDateOnly(newSalaryData.date);
-      const matchingAttendance = attendanceRecords.find(att => 
-        att.employeeId === newSalaryData.employeeId && 
-        getDateOnly(att.date) === attendanceDateOnly
-      );
+      console.log(`🔍 Searching for attendance: employeeId=${newSalaryData.employeeId}, date=${attendanceDateOnly}`);
+      
+      const matchingAttendance = attendanceRecords.find(att => {
+        const attDate = getDateOnly(att.date);
+        const match = att.employeeId === newSalaryData.employeeId && attDate === attendanceDateOnly;
+        if (att.employeeId === newSalaryData.employeeId) {
+          console.log(`🔎 Checking attendance: employeeId=${att.employeeId}, date=${attDate}, match=${match}`);
+        }
+        return match;
+      });
 
       let salaryAmount = 0;
       let status = 'N/A';
@@ -642,6 +650,7 @@ const Salary = () => {
         console.log(`📊 Found matching attendance: ${status}, Amount: ₱${salaryAmount}`);
       } else {
         console.warn(`⚠️ No attendance record found for ${newSalaryData.employeeId} on ${attendanceDateOnly}`);
+        console.warn(`📊 All attendance dates for this employee:`, attendanceRecords.filter(att => att.employeeId === newSalaryData.employeeId).map(att => getDateOnly(att.date)));
       }
 
       // Create salary record with data from attendance
@@ -654,6 +663,7 @@ const Salary = () => {
         archived: false
       };
 
+      console.log(`💾 Creating salary record:`, salaryData);
       const result = await salaryApi.create(salaryData);
       
       if (!result.error) {
@@ -706,13 +716,15 @@ const Salary = () => {
       // Loop through attendance records and create missing salary records
       for (const attendance of attendanceRecords) {
         // ✅ FIX: Only process completed attendance with status that has salary computation
-        const validStatuses = ['Half Day', 'Full Day', 'Overtime'];
+        const validStatuses = ['Half Day', 'Full Day', 'Overtime', 'Half-day', 'Full-day']; // Case variations
         if (!attendance.timeOut || !validStatuses.includes(attendance.status)) {
+          console.log(`⏭️ Skipping attendance: employeeId=${attendance.employeeId}, status=${attendance.status}, hasTimeOut=${!!attendance.timeOut}`);
           skippedCount++;
           continue;
         }
 
         const attendanceDate = getDateOnly(attendance.date);
+        console.log(`✅ Valid attendance found: employeeId=${attendance.employeeId}, status=${attendance.status}, date=${attendanceDate}`);
         
         // Check if salary record exists
         const existingSalary = currentSalaries.find(salary => 
@@ -721,6 +733,7 @@ const Salary = () => {
         );
 
         if (!existingSalary) {
+          console.log(`💰 Creating salary record for ${attendance.employeeId} on ${attendanceDate}`);
           // Find employee
           const employee = employees.find(emp => emp.employeeId === attendance.employeeId);
           if (!employee) {
@@ -734,7 +747,7 @@ const Salary = () => {
             employeeId: attendance.employeeId,
             name: `${employee.firstName} ${employee.lastName}`,
             salary: attendance.totalPay || attendance.daySalary || 0,
-            status: employee.status || 'Regular',
+            status: attendance.status, // Use actual status from attendance
             date: attendance.date,
             archived: false
           };
@@ -742,15 +755,18 @@ const Salary = () => {
           const result = await salaryApi.create(salaryData);
           if (!result.error) {
             createdCount++;
+            console.log(`✅ Created salary record for ${attendance.employeeId}: ${attendance.status}, ₱${salaryData.salary}`);
           } else {
             console.error(`Failed to create salary for ${attendance.employeeId}:`, result.error);
             skippedCount++;
           }
         } else {
+          console.log(`⏭️ Salary record already exists for ${attendance.employeeId} on ${attendanceDate}`);
           skippedCount++;
         }
       }
 
+      console.log(`📊 Sync complete: Created ${createdCount}, Skipped ${skippedCount}`);
       showSuccess(`Sync complete! Created ${createdCount} new salary records. Skipped ${skippedCount} records.`);
       await fetchSalaries(); // Refresh list
       

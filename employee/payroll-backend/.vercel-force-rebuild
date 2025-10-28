@@ -1,0 +1,7 @@
+DEPLOYMENT_TIMESTAMP=2025-10-29T05:15:00Z
+CRITICAL_FIXES_VERSION=1.0.8
+DEPLOYMENT_REASON=Force complete rebuild - archive route not deploying properly
+FORCE_REBUILD=true
+
+This file forces Vercel to rebuild the entire backend.
+DO NOT DELETE - used for deployment tracking.

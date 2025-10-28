@@ -20,18 +20,16 @@ console.log('   EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? '***SET (' + proc
 console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
 console.log('   MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
 
-// 🔄 Force Vercel redeployment - October 29, 2025 05:12 UTC
-// CRITICAL v1.0.7: This deployment MUST include:
-// - Fixed archive employee 500 error (using updateOne instead of findByIdAndUpdate)
-// - Fixed salary sync checking dayType with legacy record handling
-// - Fixed manual salary creation with proper validation
-// - ENHANCED: Calculate dayType from work hours for legacy records without dayType field
-console.log('✅ Backend v1.0.7 - ENHANCED FIXES: Legacy Record Support Added');
-console.log('⏰ Deployment Timestamp:', new Date().toISOString());
-console.log('🔧 Archive MUST use updateOne to bypass Mongoose middleware');
-console.log('💰 Salary sync MUST check dayType field (Half Day, Full Day, Overtime)');
-console.log('🕰️  Legacy records without dayType: Calculate from work hours (>=8hrs = Full Day)');
-console.log('✅ Manual salary creation MUST validate timeOut and dayType');
+// � CRITICAL DEPLOYMENT v1.0.8 - October 29, 2025 05:20 UTC
+// FORCE COMPLETE REBUILD - Previous deploys not updating code
+// VERIFICATION: Archive route MUST use updateOne() not findByIdAndUpdate()
+console.log('========================================');
+console.log('🚀 BACKEND v1.0.8 - FORCE COMPLETE REBUILD');
+console.log('⏰ Deployment:', new Date().toISOString());
+console.log('🔧 Archive Route: Using updateOne() bypass middleware');
+console.log('💰 Salary: Check dayType + legacy calc');
+console.log('✅ All 3 critical bugs MUST be fixed');
+console.log('========================================');
 
 // Now import everything else AFTER env vars are loaded
 import helmet from 'helmet';

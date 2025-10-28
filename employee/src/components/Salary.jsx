@@ -654,17 +654,25 @@ const Salary = () => {
           return;
         }
         
-        if (!validDayTypes.includes(matchingAttendance.dayType)) {
-          console.warn(`⚠️ Attendance found but invalid dayType: ${matchingAttendance.dayType}`);
-          showWarning(`Attendance record has invalid day type: ${matchingAttendance.dayType}. No salary calculated.`);
+        // ✅ HANDLE LEGACY RECORDS: If dayType is null, calculate it from work hours
+        let effectiveDayType = matchingAttendance.dayType;
+        if (!effectiveDayType && matchingAttendance.timeIn && matchingAttendance.timeOut) {
+          const workHours = (new Date(matchingAttendance.timeOut) - new Date(matchingAttendance.timeIn)) / (1000 * 60 * 60);
+          effectiveDayType = workHours >= 8 ? 'Full Day' : 'Half Day';
+          console.log(`🔧 Calculated dayType for legacy record: ${effectiveDayType} (${workHours.toFixed(2)} hours)`);
+        }
+        
+        if (!validDayTypes.includes(effectiveDayType)) {
+          console.warn(`⚠️ Attendance found but invalid dayType: ${effectiveDayType}`);
+          showWarning(`Attendance record has invalid day type: ${effectiveDayType}. No salary calculated.`);
           setLoading(false);
           return;
         }
         
         // Use attendance data for salary amount and status
         salaryAmount = matchingAttendance.totalPay || matchingAttendance.daySalary || 0;
-        statusDisplay = matchingAttendance.dayType || matchingAttendance.status || 'N/A'; // Use dayType for display
-        console.log(`📊 Found valid attendance: dayType=${matchingAttendance.dayType}, status=${matchingAttendance.status}, Amount: ₱${salaryAmount}`);
+        statusDisplay = effectiveDayType || matchingAttendance.status || 'N/A'; // Use calculated/existing dayType for display
+        console.log(`📊 Found valid attendance: dayType=${effectiveDayType}, status=${matchingAttendance.status}, Amount: ₱${salaryAmount}`);
       } else {
         console.warn(`⚠️ No attendance record found for ${newSalaryData.employeeId} on ${attendanceDateOnly}`);
         console.warn(`📊 All attendance dates for this employee:`, attendanceRecords.filter(att => att.employeeId === newSalaryData.employeeId).map(att => getDateOnly(att.date)));
@@ -749,15 +757,23 @@ const Salary = () => {
           continue;
         }
         
+        // ✅ HANDLE LEGACY RECORDS: If dayType is null, calculate it from work hours
+        let effectiveDayType = attendance.dayType;
+        if (!effectiveDayType && attendance.timeIn && attendance.timeOut) {
+          const workHours = (new Date(attendance.timeOut) - new Date(attendance.timeIn)) / (1000 * 60 * 60);
+          effectiveDayType = workHours >= 8 ? 'Full Day' : 'Half Day';
+          console.log(`🔧 Calculated dayType for legacy record: ${effectiveDayType} (${workHours.toFixed(2)} hours)`);
+        }
+        
         // MUST have valid dayType for salary calculation
-        if (!validDayTypes.includes(attendance.dayType)) {
-          console.log(`⏭️ Skipping - invalid dayType: employeeId=${attendance.employeeId}, dayType=${attendance.dayType}, status=${attendance.status}`);
+        if (!validDayTypes.includes(effectiveDayType)) {
+          console.log(`⏭️ Skipping - invalid dayType: employeeId=${attendance.employeeId}, dayType=${effectiveDayType}, status=${attendance.status}`);
           skippedCount++;
           continue;
         }
 
         const attendanceDate = getDateOnly(attendance.date);
-        console.log(`✅ Valid attendance found: employeeId=${attendance.employeeId}, dayType=${attendance.dayType}, status=${attendance.status}, date=${attendanceDate}`);
+        console.log(`✅ Valid attendance found: employeeId=${attendance.employeeId}, dayType=${effectiveDayType}, status=${attendance.status}, date=${attendanceDate}`);
         
         // Check if salary record exists
         const existingSalary = currentSalaries.find(salary => 

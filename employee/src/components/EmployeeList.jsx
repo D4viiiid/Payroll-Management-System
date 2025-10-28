@@ -11,7 +11,7 @@ import './Admin.responsive.css';
 
 // Memoized Employee Row Component for better performance
 const EmployeeRow = optimizedMemo(
-  ({ employee, index, onEdit, onDelete }) => (
+  ({ employee, index, onEdit, onArchive }) => (
     <tr key={employee._id} className="hover:bg-gray-50">
       <td className="px-4 py-3 whitespace-nowrap border">{index + 1}</td>
       <td className="px-4 py-3 whitespace-nowrap border">{employee.employeeId}</td>
@@ -49,10 +49,10 @@ const EmployeeRow = optimizedMemo(
             Edit
           </button>
           <button
-            onClick={() => onDelete(employee._id)}
-            className="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600 transition duration-200"
+            onClick={() => onArchive(employee)}
+            className="bg-yellow-500 text-yellow-900 px-2 py-1 rounded text-xs hover:bg-yellow-600 transition duration-200"
           >
-            Delete
+            📁 Archive
           </button>
         </div>
       </td>
@@ -133,19 +133,17 @@ const Employee = () => {
       console.log('📝 EmployeeList: Received employee-updated event, calling fetchEmployees(true)');
       fetchEmployees(true); // ✅ Bypass cache
     };
-    const handleEmployeeDeleted = (data) => {
-      console.log('🗑️ EmployeeList: Received employee-deleted event for ID:', data.id);
-      // Remove the deleted employee from the list immediately
-      setEmployees(prev => prev.filter(emp => emp._id !== data.id));
-      // Also fetch fresh data to ensure consistency
-      console.log('🔄 EmployeeList: Calling fetchEmployees(true) after delete');
+    const handleEmployeeArchived = (data) => {
+      console.log('� EmployeeList: Received employee-archived event for ID:', data.id);
+      // Refresh the employee list to reflect archived status
+      console.log('🔄 EmployeeList: Calling fetchEmployees(true) after archive');
       fetchEmployees(true); // ✅ Bypass cache
     };
 
     console.log('🔧 EmployeeList: Registering event listeners');
     eventBus.on('employee-created', handleEmployeeCreated);
     eventBus.on('employee-updated', handleEmployeeUpdated);
-    eventBus.on('employee-deleted', handleEmployeeDeleted);
+    eventBus.on('employee-archived', handleEmployeeArchived);
     console.log('✅ EmployeeList: Event listeners registered');
 
     // Cleanup listeners on unmount
@@ -153,7 +151,7 @@ const Employee = () => {
       console.log('🧹 EmployeeList: Cleaning up event listeners');
       eventBus.removeListener('employee-created', handleEmployeeCreated);
       eventBus.removeListener('employee-updated', handleEmployeeUpdated);
-      eventBus.removeListener('employee-deleted', handleEmployeeDeleted);
+      eventBus.removeListener('employee-archived', handleEmployeeArchived);
     };
   }, []);
 
@@ -486,44 +484,32 @@ const handleFingerprintEnrollment = async () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    const confirmed = await showConfirm('Are you sure you want to delete this employee?', {
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      confirmColor: '#ef4444' // Red for delete
-    });
+  // ✅ ARCHIVE FUNCTIONALITY: Replace delete with archive for data transparency
+  const handleArchive = async (employee) => {
+    const confirmed = await showConfirm(
+      `Are you sure you want to archive ${employee.firstName} ${employee.lastName}?`, 
+      {
+        confirmText: '📁 Archive',
+        cancelText: 'Cancel',
+        confirmColor: '#f59e0b' // Amber for archive
+      }
+    );
     
     if (confirmed) {
       try {
         setLoading(true);
-        const result = await employeeApi.delete(id);
+        const result = await employeeApi.archive(employee._id);
         if (!result.error) {
-          showSuccess('Employee deleted successfully!');
-          // ✅ DON'T call fetchEmployees here - the event bus will handle it
-          // The 'employee-deleted' event will trigger the event listener above
+          showSuccess('Employee archived successfully! They can no longer clock in/out.');
+          // Refresh employee list
+          await fetchEmployees(true); // Bypass cache
         } else {
-          // Handle specific error: Employee already deleted
-          if (result.error.includes('Employee not found')) {
-            showWarning('This employee has already been deleted. Refreshing list...');
-            // Remove from local state and refresh with BYPASS CACHE
-            setEmployees(prev => prev.filter(emp => emp._id !== id));
-            await fetchEmployees(true); // ✅ Manual fetch only for error case
-          } else {
-            showError('Error: ' + result.error);
-          }
+          showError('Error: ' + result.error);
         }
         setError(null);
       } catch (err) {
         setError(err.message);
-        // Handle specific error: Employee already deleted
-        if (err.message.includes('Employee not found')) {
-          showWarning('This employee has already been deleted. Refreshing list...');
-          // Remove from local state and refresh with BYPASS CACHE
-          setEmployees(prev => prev.filter(emp => emp._id !== id));
-          await fetchEmployees(true); // ✅ Manual fetch only for error case
-        } else {
-          showError('Error: ' + err.message);
-        }
+        showError('Error: ' + err.message);
       } finally {
         setLoading(false);
       }
@@ -861,7 +847,7 @@ const handleFingerprintEnrollment = async () => {
                             employee={employee}
                             index={index}
                             onEdit={handleEdit}
-                            onDelete={handleDelete}
+                            onArchive={handleArchive}
                           />
                         ))
                       )}

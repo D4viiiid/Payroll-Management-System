@@ -595,6 +595,15 @@ router.post('/attendance/record', async (req, res) => {
             return res.status(404).json({ error: 'Fingerprint not recognized' });
         }
 
+        // ✅ FIX: Prevent archived employees from clocking in/out
+        if (employee.isActive === false || employee.archived === true) {
+            console.log('🚫 Archived employee attempted to clock in:', employee.employeeId);
+            return res.status(403).json({ 
+                error: 'Account Archived',
+                message: 'Your employee account has been archived. Please contact your administrator.' 
+            });
+        }
+
         // Get current date and time in Philippines timezone
         const now = getPhilippinesNow();
         const today = getDateOnly(); // YYYY-MM-DD format

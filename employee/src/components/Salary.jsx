@@ -705,6 +705,9 @@ const Salary = () => {
       const attendanceRecords = Array.isArray(attendanceResult) ? attendanceResult : 
                                (attendanceResult.data || attendanceResult.attendance || []);
       
+      console.log(`📋 Total attendance records fetched for sync: ${attendanceRecords.length}`);
+      console.log(`📊 Unique attendance statuses in database:`, [...new Set(attendanceRecords.map(a => a.status))]);
+      
       // Fetch current salary records
       const salaryResult = await salaryApi.getAll();
       const currentSalaries = Array.isArray(salaryResult) ? salaryResult : 

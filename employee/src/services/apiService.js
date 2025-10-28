@@ -247,6 +247,14 @@ export const employeeApi = {
     return data;
   },
 
+  // ✅ NEW: Get archived employees
+  getArchived: async () => {
+    console.log('📁 apiService.getArchived: Fetching archived employees');
+    const data = await fetchApi(`${BACKEND_API_URL}/employees/archived/list`);
+    console.log('📁 apiService.getArchived: Archived employees fetched:', data);
+    return data;
+  },
+
   // Delete employee (deprecated - use archive instead)
   delete: async (id) => {
     console.log('🗑️ apiService.delete: Starting employee deletion for ID:', id);

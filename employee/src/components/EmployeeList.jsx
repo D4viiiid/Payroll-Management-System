@@ -94,6 +94,8 @@ const Employee = () => {
 
   // === STATE MANAGEMENT ===
   const [employees, setEmployees] = useState([]);
+  const [archivedEmployees, setArchivedEmployees] = useState([]); // ✅ ARCHIVED EMPLOYEES
+  const [showArchived, setShowArchived] = useState(false); // ✅ TOGGLE VIEW
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -172,6 +174,39 @@ const Employee = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ✅ NEW: Fetch archived employees
+  const fetchArchivedEmployees = async () => {
+    try {
+      console.log('📁 EmployeeList: fetchArchivedEmployees called');
+      setLoading(true);
+      const data = await employeeApi.getArchived();
+      console.log('📦 EmployeeList: Received archived data from API:', data);
+      // Handle both {employees: []} and plain array []
+      const archivedList = Array.isArray(data) ? data : (data.employees || data.data || []);
+      setArchivedEmployees(archivedList);
+      console.log('✅ EmployeeList: Archived state updated with', archivedList.length, 'employees');
+      setError(null);
+    } catch (err) {
+      logger.error('Error fetching archived employees:', err);
+      setError(err.message || 'Failed to fetch archived employees.');
+      setArchivedEmployees([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ NEW: Toggle View Archive
+  const handleViewArchiveToggle = () => {
+    if (!showArchived) {
+      // Switching to archived view
+      fetchArchivedEmployees();
+    } else {
+      // Switching back to main view
+      fetchEmployees(true);
+    }
+    setShowArchived(!showArchived);
   };
 
   // === REAL FINGERPRINT ENROLLMENT ===
@@ -266,7 +301,9 @@ const handleFingerprintEnrollment = async () => {
   }
 };
   // === SEARCH FUNCTIONALITY ===
-  const filteredEmployees = employees.filter(employee => {
+  // ✅ FIX: Use archived employees when in archive view
+  const currentEmployeeList = showArchived ? archivedEmployees : employees;
+  const filteredEmployees = currentEmployeeList.filter(employee => {
     const searchLower = searchTerm.toLowerCase();
     const fullName = `${employee.firstName} ${employee.lastName}`.toLowerCase();
     const employeeId = employee.employeeId?.toLowerCase() || '';
@@ -774,20 +811,39 @@ const handleFingerprintEnrollment = async () => {
                     Comprehensive employee database and management system
                   </p>
                 </div>
-                <button 
-                  className="btn" 
-                  onClick={handleAddEmployeeClick}
-                  style={{ 
-                    backgroundColor: '#f06a98', 
-                    border: 'none', 
-                    color: '#ffffff', 
-                    padding: '10px 20px', 
-                    fontSize: '1rem',
-                    borderRadius: '8px'
-                  }}
-                >
-                  <i className="fas fa-plus me-2"></i>Add Employee
-                </button>
+                <div className="d-flex gap-2">
+                  <button 
+                    className="btn" 
+                    onClick={handleViewArchiveToggle}
+                    style={{ 
+                      backgroundColor: showArchived ? '#6c757d' : '#f06a98', 
+                      border: 'none', 
+                      color: '#ffffff', 
+                      padding: '10px 20px', 
+                      fontSize: '1rem',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    <i className={`fas ${showArchived ? 'fa-arrow-left' : 'fa-archive'} me-2`}></i>
+                    {showArchived ? 'Back to Main' : 'View Archive'}
+                  </button>
+                  {!showArchived && (
+                    <button 
+                      className="btn" 
+                      onClick={handleAddEmployeeClick}
+                      style={{ 
+                        backgroundColor: '#f06a98', 
+                        border: 'none', 
+                        color: '#ffffff', 
+                        padding: '10px 20px', 
+                        fontSize: '1rem',
+                        borderRadius: '8px'
+                      }}
+                    >
+                      <i className="fas fa-plus me-2"></i>Add Employee
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Search Bar */}
@@ -818,7 +874,15 @@ const handleFingerprintEnrollment = async () => {
                 </div>
               ) : (
                 <div className="overflow-x-auto bg-white p-4 rounded-lg shadow-md" style={{ marginTop: '10px' }}>
-                  <h2 className="text-xl font-semibold text-gray-700 mb-3">Employee Records</h2>
+                  <h2 className="text-xl font-semibold text-gray-700 mb-3">
+                    {showArchived ? 'Archived Employee Records - All Archived Records' : 'Employee Records'}
+                  </h2>
+                  {showArchived && archivedEmployees.length === 0 ? (
+                    <div className="text-center py-8">
+                      <i className="fas fa-archive fa-3x text-gray-300 mb-3"></i>
+                      <p className="text-gray-500">No archived employees found</p>
+                    </div>
+                  ) : (
                   <table className="min-w-full table-auto text-sm" style={{ fontSize: '0.875rem' }}>
                     <thead className="bg-gray-100 text-gray-600">
                       <tr>
@@ -853,6 +917,7 @@ const handleFingerprintEnrollment = async () => {
                       )}
                     </tbody>
                   </table>
+                  )}
                 </div>
               )}
             </div>

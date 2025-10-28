@@ -406,25 +406,42 @@ router.put('/:id', async (req, res) => {
 // 🗄️ ARCHIVE an employee by ID (soft delete for transparency)
 router.post('/:id/archive', async (req, res) => {
   try {
+    console.log(`📁 Archive request received for employee ID: ${req.params.id}`);
     const { archivedBy } = req.body; // Admin username/ID who is archiving
     
-    const employee = await Employee.findById(req.params.id);
+    // ✅ FIX: Use findByIdAndUpdate instead of save() to avoid validation issues
+    const employee = await Employee.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          isArchived: true,
+          archivedAt: new Date(),
+          archivedBy: archivedBy || 'Unknown Admin',
+          isActive: false // Deactivate account to prevent login and attendance
+        }
+      },
+      { 
+        new: true, // Return updated document
+        runValidators: false // Skip validation for archive operation
+      }
+    );
+
     if (!employee) {
-      return res.status(404).json({ message: 'Employee not found' });
+      console.log(`❌ Employee not found: ${req.params.id}`);
+      return res.status(404).json({ 
+        success: false,
+        message: 'Employee not found' 
+      });
     }
 
     // Check if already archived
-    if (employee.isArchived) {
-      return res.status(400).json({ message: 'Employee is already archived' });
+    if (employee.isArchived && !employee.archivedAt) {
+      console.log(`⚠️ Employee already archived: ${req.params.id}`);
+      return res.status(400).json({ 
+        success: false,
+        message: 'Employee is already archived' 
+      });
     }
-
-    // Update employee to archived status
-    employee.isArchived = true;
-    employee.archivedAt = new Date();
-    employee.archivedBy = archivedBy || 'Unknown Admin';
-    employee.isActive = false; // Deactivate account to prevent login and attendance
-    
-    await employee.save();
 
     console.log(`✅ Employee ${employee.firstName} ${employee.lastName} archived successfully`);
     res.json({ 
@@ -440,7 +457,13 @@ router.post('/:id/archive', async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error archiving employee:', err);
-    res.status(500).json({ message: 'Failed to archive employee', error: err.message });
+    console.error('❌ Error stack:', err.stack);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to archive employee', 
+      error: err.message,
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
 

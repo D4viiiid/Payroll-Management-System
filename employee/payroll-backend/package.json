@@ -1,6 +1,6 @@
 {
   "name": "employee-backend",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Backend for Employee Management - CRITICAL FIXES v1.0.6",
   "main": "server.js",
   "scripts": {

@@ -12,12 +12,12 @@ import './Admin.responsive.css';
 const Employees = () => {
   const [employees, setEmployees] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // ❌ REMOVED: Delete functionality completely removed for data transparency
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false); // ✅ Archive modal
   const [showArchivedView, setShowArchivedView] = useState(false); // ✅ View archived employees
   const [archivedEmployees, setArchivedEmployees] = useState([]); // ✅ Archived employees list
   const [showAddForm, setShowAddForm] = useState(false);
-  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  // ❌ REMOVED: employeeToDelete state (replaced with archive)
   const [employeeToArchive, setEmployeeToArchive] = useState(null); // ✅ Employee to archive
   const [enrollingEmployee, setEnrollingEmployee] = useState(null);
   const [enrollmentStatus, setEnrollmentStatus] = useState('');
@@ -110,11 +110,7 @@ const Employees = () => {
       fetchEmployees(); // Immediately fetch fresh data
     });
     
-    // ✅ NEW: Listen for employee deletion event
-    const unsubscribeDeleted = eventBus.on('employee-deleted', () => {
-      logger.log('🗑️ Employee deleted event received, refreshing data immediately...');
-      fetchEmployees(); // Immediately fetch fresh data
-    });
+    // ❌ REMOVED: Delete event listener (replaced with archive)
     
     // Clean up on component unmount
     return () => {
@@ -122,14 +118,11 @@ const Employees = () => {
       unsubscribeUpdated();
       unsubscribeCreated();
       unsubscribeUpdatedSingle();
-      unsubscribeDeleted();
+      // ❌ REMOVED: unsubscribeDeleted
     };
   }, [fetchEmployees]); // ✅ FIX: Add fetchEmployees as dependency
 
-  const handleDeleteClick = (employee) => {
-    setEmployeeToDelete(employee);
-    setShowDeleteConfirm(true);
-  };
+  // ❌ REMOVED: handleDeleteClick function (replaced with archive)
 
   // ✅ ARCHIVE FUNCTIONALITY: Replace delete with archive
   const handleArchiveClick = (employee) => {
@@ -229,30 +222,8 @@ const Employees = () => {
   };
 
   // ✅ BUG #25 FIX: Delete confirm with React Hot Toast
-  const handleDeleteConfirm = async () => {
-    try {
-      // ✅ FIX: Use centralized API service for deletion to trigger events
-      const result = await apiService.employee.delete(employeeToDelete._id);
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      // ✅ FIX: The event listener will automatically refresh the data
-      // No need to manually update state here
-      setShowDeleteConfirm(false);
-      setEmployeeToDelete(null);
-      showSuccess('Employee deleted successfully!');
-    } catch (error) {
-      logger.error('Error deleting employee:', error);
-      showError('Error deleting employee: ' + error.message);
-    }
-  };
-
-  const handleDeleteCancel = () => {
-    setShowDeleteConfirm(false);
-    setEmployeeToDelete(null);
-  };
+  // ❌ REMOVED: handleDeleteConfirm function (delete functionality removed)
+  // ❌ REMOVED: handleDeleteCancel function (delete functionality removed)
 
   const checkFingerprintService = async () => {
     try {
@@ -1277,36 +1248,7 @@ const Employees = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal (DEPRECATED - Kept for compatibility) */}
-      {showDeleteConfirm && employeeToDelete && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
-          <div className="relative p-8 border w-96 shadow-lg rounded-md bg-white">
-            <div className="text-center">
-              <h3 className="text-lg font-semibold leading-6 text-gray-900">Confirm Deletion</h3>
-              <div className="mt-2 px-7 py-3">
-                <p className="text-sm text-gray-500">
-                  Are you sure you want to delete {employeeToDelete.firstName} {employeeToDelete.lastName}?
-                  This action cannot be undone.
-                </p>
-              </div>
-              <div className="items-center px-4 py-3">
-                <button
-                  onClick={handleDeleteConfirm}
-                  className="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
-                >
-                  Delete
-                </button>
-                <button
-                  onClick={handleDeleteCancel}
-                  className="mt-3 px-4 py-2 bg-gray-200 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ❌ REMOVED: Delete Confirmation Modal - Delete functionality completely removed for data transparency */}
         </div>
       </div>
     </div>

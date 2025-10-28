@@ -3,6 +3,7 @@ const router = express.Router();
 import Attendance from '../models/AttendanceModels.js';
 import Employee from '../models/EmployeeModels.js';
 import SalaryRate from '../models/SalaryRate.model.js';
+import Salary from '../models/SalaryModel.js'; // ✅ NEW: Import Salary model for auto-creation
 import { localEmployeeStorage, localAttendanceStorage } from '../localStorage.js';
 import { mongoConnected } from '../server.js';
 import { validateTimeInRealTime, validateAndCalculateAttendance } from '../utils/attendanceCalculator.js';
@@ -765,6 +766,9 @@ router.post('/attendance/record', async (req, res) => {
 
             await todayRecord.save();
 
+            // ✅ NEW: Auto-create or update salary record from attendance
+            await autoCreateSalaryRecord(employee, todayRecord, dateOnly);
+
             console.log(`✅ Time Out recorded for ${employee.firstName} ${employee.lastName} - ${calculation.dayType}`);
             message = `${employee.firstName} ${employee.lastName} timed out successfully at ${formatTime(now)} (${calculation.dayType}: ${calculation.hoursWorked.toFixed(2)} hours)`;
             actionType = 'time_out';
@@ -799,6 +803,47 @@ router.post('/attendance/record', async (req, res) => {
         res.status(500).json({ error: 'Failed to record attendance' });
     }
 });
+
+// ✅ NEW: Helper function to auto-create or update salary record from attendance
+async function autoCreateSalaryRecord(employee, attendanceRecord, date) {
+    try {
+        console.log(`💰 Auto-creating/updating salary record for ${employee.firstName} ${employee.lastName} on ${date}`);
+        
+        // Check if salary record already exists for this employee on this date
+        const existingSalary = await Salary.findOne({
+            employeeId: employee.employeeId,
+            date: date
+        });
+
+        if (existingSalary) {
+            // Update existing salary record
+            existingSalary.salary = attendanceRecord.totalPay || attendanceRecord.daySalary || 0;
+            existingSalary.name = `${employee.firstName} ${employee.lastName}`;
+            existingSalary.status = employee.status || 'Regular';
+            await existingSalary.save();
+            console.log(`✅ Updated existing salary record for ${employee.employeeId} on ${date}: ₱${existingSalary.salary.toFixed(2)}`);
+        } else {
+            // Create new salary record
+            const newSalary = new Salary({
+                employeeId: employee.employeeId,
+                name: `${employee.firstName} ${employee.lastName}`,
+                salary: attendanceRecord.totalPay || attendanceRecord.daySalary || 0,
+                status: employee.status || 'Regular',
+                date: date,
+                archived: false
+            });
+            await newSalary.save();
+            console.log(`✅ Created new salary record for ${employee.employeeId} on ${date}: ₱${newSalary.salary.toFixed(2)}`);
+        }
+
+        return true;
+    } catch (error) {
+        console.error('❌ Error auto-creating salary record:', error);
+        console.error('❌ Error details:', error.message);
+        // Don't throw error - salary creation failure shouldn't block attendance
+        return false;
+    }
+}
 
 // Helper function to create automatic deductions for attendance issues
 async function createAttendanceDeduction(employee, reason, percentage, date) {

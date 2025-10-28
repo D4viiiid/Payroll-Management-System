@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { salaryApi, employeeApi } from '../services/apiService';
+import { salaryApi, employeeApi, attendanceApi } from '../services/apiService'; // ✅ Added attendanceApi
 import { useDebounce } from '../utils/debounce';
 import { logger } from '../utils/logger';
 import AdminSidebar from './AdminSidebar';
@@ -601,6 +601,147 @@ const Salary = () => {
     }
   };
 
+  // ✅ NEW: Handle adding manual salary record
+  const handleAddSalary = async (e) => {
+    e.preventDefault();
+    
+    if (!newSalaryData.employeeId || !newSalaryData.date) {
+      showError('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Find employee to get name
+      const employee = employees.find(emp => emp.employeeId === newSalaryData.employeeId);
+      if (!employee) {
+        showError('Employee not found');
+        return;
+      }
+
+      // Create salary record with 0 initial salary (will display attendance totalPay)
+      const salaryData = {
+        employeeId: newSalaryData.employeeId,
+        name: `${employee.firstName} ${employee.lastName}`,
+        salary: 0, // This will be overridden by attendance totalPay
+        status: employee.status || 'Regular',
+        date: newSalaryData.date,
+        archived: false
+      };
+
+      const result = await salaryApi.create(salaryData);
+      
+      if (!result.error) {
+        showSuccess('Salary record created successfully!');
+        setShowAddForm(false);
+        await fetchSalaries(); // Refresh list
+        setNewSalaryData({ employeeId: '', salary: '', date: '' }); // Reset form
+      } else {
+        showError(result.error);
+      }
+    } catch (error) {
+      logger.error('Error creating salary record:', error);
+      showError('Failed to create salary record');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ NEW: Sync missing salary records from attendance
+  const handleSyncMissingRecords = async () => {
+    const confirmed = await showConfirm(
+      'This will create salary records for all attendance records that don\'t have a matching salary record. Continue?',
+      {
+        confirmText: 'Sync Now',
+        cancelText: 'Cancel',
+        confirmColor: '#3b82f6'
+      }
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      
+      // Fetch all attendance records
+      const attendanceResult = await attendanceApi.getAll();
+      const attendanceRecords = Array.isArray(attendanceResult) ? attendanceResult : 
+                               (attendanceResult.data || attendanceResult.attendance || []);
+      
+      // Fetch current salary records
+      const salaryResult = await salaryApi.getAll();
+      const currentSalaries = Array.isArray(salaryResult) ? salaryResult : 
+                             (salaryResult.data || []);
+      
+      let createdCount = 0;
+      let skippedCount = 0;
+      
+      // Loop through attendance records and create missing salary records
+      for (const attendance of attendanceRecords) {
+        // Only process completed attendance (has timeOut)
+        if (!attendance.timeOut) {
+          skippedCount++;
+          continue;
+        }
+
+        const attendanceDate = getDateOnly(attendance.date);
+        
+        // Check if salary record exists
+        const existingSalary = currentSalaries.find(salary => 
+          salary.employeeId === attendance.employeeId && 
+          getDateOnly(salary.date) === attendanceDate
+        );
+
+        if (!existingSalary) {
+          // Find employee
+          const employee = employees.find(emp => emp.employeeId === attendance.employeeId);
+          if (!employee) {
+            console.warn(`Employee not found for attendance: ${attendance.employeeId}`);
+            skippedCount++;
+            continue;
+          }
+
+          // Create salary record
+          const salaryData = {
+            employeeId: attendance.employeeId,
+            name: `${employee.firstName} ${employee.lastName}`,
+            salary: attendance.totalPay || attendance.daySalary || 0,
+            status: employee.status || 'Regular',
+            date: attendance.date,
+            archived: false
+          };
+
+          const result = await salaryApi.create(salaryData);
+          if (!result.error) {
+            createdCount++;
+          } else {
+            console.error(`Failed to create salary for ${attendance.employeeId}:`, result.error);
+            skippedCount++;
+          }
+        } else {
+          skippedCount++;
+        }
+      }
+
+      showSuccess(`Sync complete! Created ${createdCount} new salary records. Skipped ${skippedCount} records.`);
+      await fetchSalaries(); // Refresh list
+      
+    } catch (error) {
+      logger.error('Error syncing salary records:', error);
+      showError('Failed to sync salary records');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper function to get date only (YYYY-MM-DD)
+  const getDateOnly = (dateValue) => {
+    if (!dateValue) return '';
+    const date = new Date(dateValue);
+    return date.toISOString().split('T')[0];
+  };
+
   // === RENDER ===
   if (error) return (
     <div className="container mt-4">
@@ -653,25 +794,62 @@ const Salary = () => {
                     Automatic salary calculation based on attendance records
                   </p>
                 </div>
-                {/* ✅ CORRECT: Adjust Salary Rate button opens modal */}
-                <button 
-                  className="btn" 
-                  onClick={() => setShowSalaryRateModal(true)}
+                <div className="flex gap-2">
+                  {/* ✅ NEW: Add Salary Record button */}
+                  <button 
+                    className="btn" 
+                    onClick={() => setShowAddForm(true)}
+                    style={{ 
+                      backgroundColor: '#10b981', 
+                      border: 'none', 
+                      color: '#ffffff', 
+                      padding: '10px 20px', 
+                      fontSize: '1rem',
+                      borderRadius: '8px'
+                    }}
+                    title="Manually add salary record"
+                  >
+                    <i className="fas fa-plus me-2"></i>Add Salary Record
+                  </button>
+                  
+                  {/* ✅ CORRECT: Adjust Salary Rate button opens modal */}
+                  <button 
+                    className="btn" 
+                    onClick={() => setShowSalaryRateModal(true)}
+                    style={{ 
+                      backgroundColor: '#f06a98', 
+                      border: 'none', 
+                      color: '#ffffff', 
+                      padding: '10px 20px', 
+                      fontSize: '1rem',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    <i className="fas fa-edit me-2"></i>Adjust Salary Rate
+                  </button>
+                </div>
+              </div>
+
+              {/* Search Bar and Filters */}
+              <div className="mt-4 d-flex gap-3 align-items-center flex-wrap">
+                {/* ✅ NEW: Sync Missing Records button */}
+                <button
+                  onClick={handleSyncMissingRecords}
+                  className="btn"
                   style={{ 
-                    backgroundColor: '#f06a98', 
+                    backgroundColor: '#3b82f6', 
                     border: 'none', 
                     color: '#ffffff', 
                     padding: '10px 20px', 
                     fontSize: '1rem',
                     borderRadius: '8px'
                   }}
+                  title="Create salary records for all attendance without salary records"
                 >
-                  <i className="fas fa-edit me-2"></i>Adjust Salary Rate
+                  <i className="fas fa-sync me-2"></i>
+                  Sync Missing Records
                 </button>
-              </div>
-
-              {/* Search Bar and Filters */}
-              <div className="mt-4 d-flex gap-3 align-items-center flex-wrap">
+                
                 {/* Search by Name/ID */}
                 <div className="input-group" style={{ maxWidth: '400px' }}>
                   <span className="input-group-text">
@@ -1052,6 +1230,83 @@ const Salary = () => {
           </div>
         </div>
       </div>
+
+      {/* ✅ NEW: Add Salary Record Modal */}
+      {showAddForm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+          <div className="relative p-8 border w-96 shadow-lg rounded-md bg-white">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold leading-6 text-gray-900 mb-4">Add Salary Record</h3>
+              <form onSubmit={handleAddSalary}>
+                <div className="space-y-4">
+                  {/* Employee Selection */}
+                  <div className="text-left">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Employee *
+                    </label>
+                    <select
+                      value={newSalaryData.employeeId}
+                      onChange={(e) => setNewSalaryData({...newSalaryData, employeeId: e.target.value})}
+                      className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500"
+                      required
+                      style={{ color: 'black' }}
+                    >
+                      <option value="">Select Employee</option>
+                      {employees.map(emp => (
+                        <option key={emp.employeeId} value={emp.employeeId}>
+                          {emp.employeeId} - {emp.firstName} {emp.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Date Selection */}
+                  <div className="text-left">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={newSalaryData.date}
+                      onChange={(e) => setNewSalaryData({...newSalaryData, date: e.target.value})}
+                      className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500"
+                      required
+                      style={{ color: 'black' }}
+                    />
+                  </div>
+
+                  {/* Info Message */}
+                  <div className="text-xs text-gray-500 text-left bg-blue-50 p-3 rounded">
+                    <i className="fas fa-info-circle mr-1"></i>
+                    The salary amount will be automatically calculated from the attendance record for this date.
+                  </div>
+                </div>
+
+                {/* Buttons */}
+                <div className="mt-6 space-y-2">
+                  <button
+                    type="submit"
+                    className="w-full px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <i className="fas fa-save mr-2"></i>
+                    Create Salary Record
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddForm(false);
+                      setNewSalaryData({ employeeId: '', salary: '', date: '' });
+                    }}
+                    className="w-full px-4 py-2 bg-gray-200 text-base font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ✅ CORRECT: Salary Rate Modal */}
       <SalaryRateModal 

@@ -1,0 +1,12 @@
+DEPLOYMENT_TIMESTAMP=2025-10-29T05:25:00Z
+CRITICAL_FIXES_VERSION=1.0.5
+DEPLOYMENT_REASON=Force complete frontend rebuild - Salary.jsx dayType fixes not deploying
+FORCE_REBUILD=true
+
+This file forces Vercel to rebuild the entire frontend.
+DO NOT DELETE - used for deployment tracking.
+
+CRITICAL FIXES IN THIS DEPLOYMENT:
+1. Salary.jsx - Line 737-765: Check dayType instead of status (sync)
+2. Salary.jsx - Line 643-674: Check dayType with validation (manual creation)
+3. Both include legacy record support (calculate dayType from work hours)

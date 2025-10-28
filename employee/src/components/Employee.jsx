@@ -13,8 +13,12 @@ const Employees = () => {
   const [employees, setEmployees] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false); // ✅ Archive modal
+  const [showArchivedView, setShowArchivedView] = useState(false); // ✅ View archived employees
+  const [archivedEmployees, setArchivedEmployees] = useState([]); // ✅ Archived employees list
   const [showAddForm, setShowAddForm] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [employeeToArchive, setEmployeeToArchive] = useState(null); // ✅ Employee to archive
   const [enrollingEmployee, setEnrollingEmployee] = useState(null);
   const [enrollmentStatus, setEnrollmentStatus] = useState('');
   const [fingerprintServiceStatus, setFingerprintServiceStatus] = useState('checking');
@@ -125,6 +129,103 @@ const Employees = () => {
   const handleDeleteClick = (employee) => {
     setEmployeeToDelete(employee);
     setShowDeleteConfirm(true);
+  };
+
+  // ✅ ARCHIVE FUNCTIONALITY: Replace delete with archive
+  const handleArchiveClick = (employee) => {
+    setEmployeeToArchive(employee);
+    setShowArchiveConfirm(true);
+  };
+
+  const handleArchiveConfirm = async () => {
+    try {
+      const adminUsername = localStorage.getItem('username') || 'Admin';
+      
+      const response = await fetch(`/api/employees/${employeeToArchive._id}/archive`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ archivedBy: adminUsername })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        throw new Error(result.error || result.message || 'Failed to archive employee');
+      }
+
+      setShowArchiveConfirm(false);
+      setEmployeeToArchive(null);
+      showSuccess(`Employee ${result.employee.firstName} ${result.employee.lastName} archived successfully!`);
+      
+      // Refresh employee list
+      fetchEmployees();
+    } catch (error) {
+      logger.error('Error archiving employee:', error);
+      showError('Error archiving employee: ' + error.message);
+    }
+  };
+
+  const handleArchiveCancel = () => {
+    setShowArchiveConfirm(false);
+    setEmployeeToArchive(null);
+  };
+
+  // ✅ VIEW ARCHIVED EMPLOYEES
+  const handleViewArchivedClick = async () => {
+    try {
+      const response = await fetch('/api/employees/archived/list', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        throw new Error(result.error || result.message || 'Failed to fetch archived employees');
+      }
+
+      setArchivedEmployees(result.employees || []);
+      setShowArchivedView(true);
+    } catch (error) {
+      logger.error('Error fetching archived employees:', error);
+      showError('Error fetching archived employees: ' + error.message);
+    }
+  };
+
+  const handleUnarchiveEmployee = async (employeeId) => {
+    try {
+      const response = await fetch(`/api/employees/${employeeId}/unarchive`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        throw new Error(result.error || result.message || 'Failed to unarchive employee');
+      }
+
+      showSuccess(`Employee ${result.employee.firstName} ${result.employee.lastName} restored successfully!`);
+      
+      // Refresh both lists
+      fetchEmployees();
+      handleViewArchivedClick(); // Refresh archived list
+    } catch (error) {
+      logger.error('Error unarchiving employee:', error);
+      showError('Error unarchiving employee: ' + error.message);
+    }
+  };
+
+  const handleCloseArchivedView = () => {
+    setShowArchivedView(false);
+    setArchivedEmployees([]);
   };
 
   // ✅ BUG #25 FIX: Delete confirm with React Hot Toast
@@ -499,12 +600,21 @@ const Employees = () => {
           <div className="employee-content-card">
         <div className="employee-header-section">
           <h1 className="employee-title">Employee Management</h1>
-          <button
-            onClick={handleAddEmployeeClick}
-            className="add-employee-btn"
-          >
-            <span>+</span> Add Employee
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={handleViewArchivedClick}
+              className="add-employee-btn"
+              style={{ background: '#6b7280' }}
+            >
+              <span>📁</span> View Archive
+            </button>
+            <button
+              onClick={handleAddEmployeeClick}
+              className="add-employee-btn"
+            >
+              <span>+</span> Add Employee
+            </button>
+          </div>
         </div>
         
         {/* Service Status */}
@@ -712,12 +822,12 @@ const Employees = () => {
                   </td>
                   <td>
                     <button
-                      onClick={() => handleDeleteClick(employee)}
+                      onClick={() => handleArchiveClick(employee)}
                       className="table-action-btn"
-                      style={{ background: '#fee2e2', color: '#991b1b' }}
-                      title="Delete Employee"
+                      style={{ background: '#fbbf24', color: '#92400e' }}
+                      title="Archive Employee (Data Transparency)"
                     >
-                      🗑️ Delete
+                      � Archive
                     </button>
                   </td>
                 </tr>
@@ -1064,7 +1174,110 @@ const Employees = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Archive Confirmation Modal */}
+      {showArchiveConfirm && employeeToArchive && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+          <div className="relative p-8 border w-96 shadow-lg rounded-md bg-white">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold leading-6 text-gray-900">Confirm Archive</h3>
+              <div className="mt-2 px-7 py-3">
+                <p className="text-sm text-gray-500">
+                  Are you sure you want to archive <strong>{employeeToArchive.firstName} {employeeToArchive.lastName}</strong>?
+                </p>
+                <p className="text-xs text-gray-400 mt-2">
+                  Archived employees cannot clock in/out or access the system, but their data will be preserved for transparency and reporting purposes.
+                </p>
+              </div>
+              <div className="items-center px-4 py-3">
+                <button
+                  onClick={handleArchiveConfirm}
+                  className="px-4 py-2 bg-yellow-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                >
+                  📁 Archive Employee
+                </button>
+                <button
+                  onClick={handleArchiveCancel}
+                  className="mt-3 px-4 py-2 bg-gray-200 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archived Employees View Modal */}
+      {showArchivedView && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50 p-4">
+          <div className="relative border w-full max-w-6xl shadow-lg rounded-md bg-white max-h-[90vh] overflow-auto">
+            <div className="sticky top-0 bg-white border-b p-6 z-10">
+              <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-semibold text-gray-900">📁 Archived Employees</h3>
+                <button
+                  onClick={handleCloseArchivedView}
+                  className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mt-2">
+                {archivedEmployees.length} archived employee{archivedEmployees.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            
+            <div className="p-6">
+              {archivedEmployees.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <p className="text-lg">No archived employees found</p>
+                </div>
+              ) : (
+                <div className="table-responsive-wrapper">
+                  <table className="employee-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Employee ID</th>
+                        <th>Position</th>
+                        <th>Archived Date</th>
+                        <th>Archived By</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {archivedEmployees.map((employee, index) => (
+                        <tr key={employee._id}>
+                          <td>{index + 1}</td>
+                          <td>{`${employee.firstName} ${employee.lastName}`}</td>
+                          <td>{employee.email}</td>
+                          <td>{employee.employeeId}</td>
+                          <td>{employee.position}</td>
+                          <td>{new Date(employee.archivedAt).toLocaleDateString()}</td>
+                          <td>{employee.archivedBy || 'Unknown'}</td>
+                          <td>
+                            <button
+                              onClick={() => handleUnarchiveEmployee(employee._id)}
+                              className="table-action-btn"
+                              style={{ background: '#d1fae5', color: '#065f46' }}
+                              title="Restore Employee"
+                            >
+                              ↩️ Restore
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal (DEPRECATED - Kept for compatibility) */}
       {showDeleteConfirm && employeeToDelete && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
           <div className="relative p-8 border w-96 shadow-lg rounded-md bg-white">

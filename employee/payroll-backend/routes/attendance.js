@@ -990,6 +990,15 @@ router.post('/attendance/test-record', async (req, res) => {
             return res.status(404).json({ error: 'Employee not found' });
         }
 
+        // ✅ ARCHIVE FIX: Prevent archived employees from scanning fingerprints
+        if (employee.isArchived) {
+            return res.status(403).json({ 
+                success: false,
+                error: 'Cannot perform attendance operations for archived employee',
+                message: 'This employee account has been archived and cannot clock in/out'
+            });
+        }
+
         // Get current date and time
         const now = new Date();
         const today = now.toISOString().split('T')[0];
@@ -1214,6 +1223,14 @@ router.post('/attendance/calculate', async (req, res) => {
             return res.status(404).json({
                 success: false,
                 error: 'Employee not found'
+            });
+        }
+
+        // ✅ ARCHIVE FIX: Prevent archived employees from attendance operations
+        if (employee.isArchived) {
+            return res.status(403).json({
+                success: false,
+                error: 'Cannot perform attendance operations for archived employee'
             });
         }
 

@@ -60,11 +60,14 @@ router.get('/', async (req, res) => {
     // If pagination requested (page param exists), use paginated response
     if (req.query.page) {
       // ✅ CRITICAL PERFORMANCE FIX: Run count and query in parallel
+      // ✅ ARCHIVE FIX: Exclude archived employees by default unless includeArchived=true
+      const filter = req.query.includeArchived === 'true' ? {} : { isArchived: { $ne: true } };
+      
       const [totalCount, employees] = await Promise.all([
-        Employee.countDocuments().exec(),
+        Employee.countDocuments(filter).exec(),
         
-        Employee.find()
-          .select('firstName lastName email employeeId contactNumber status position hireDate isActive isAdmin fingerprintEnrolled') // Only select needed fields
+        Employee.find(filter)
+          .select('firstName lastName email employeeId contactNumber status position hireDate isActive isAdmin fingerprintEnrolled isArchived archivedAt') // Only select needed fields
           .limit(limit)
           .skip(skip)
           .sort({ createdAt: -1 })
@@ -80,8 +83,11 @@ router.get('/', async (req, res) => {
     }
     
     // ✅ PERFORMANCE FIX: Default query optimized with lean() and field selection
-    const employees = await Employee.find()
-      .select('firstName lastName email employeeId contactNumber status position hireDate isActive isAdmin fingerprintEnrolled')  // Specific fields only
+    // ✅ ARCHIVE FIX: Exclude archived employees by default unless includeArchived=true
+    const filter = req.query.includeArchived === 'true' ? {} : { isArchived: { $ne: true } };
+    
+    const employees = await Employee.find(filter)
+      .select('firstName lastName email employeeId contactNumber status position hireDate isActive isAdmin fingerprintEnrolled isArchived archivedAt')  // Specific fields only
       .sort({ createdAt: -1 })
       .lean() // Use lean() for 5-10x faster queries
       .exec();
@@ -397,15 +403,130 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE an employee by ID
-router.delete('/:id', async (req, res) => {
+// 🗄️ ARCHIVE an employee by ID (soft delete for transparency)
+router.post('/:id/archive', async (req, res) => {
   try {
-    const deletedEmployee = await Employee.findByIdAndDelete(req.params.id);
-    if (!deletedEmployee) {
+    const { archivedBy } = req.body; // Admin username/ID who is archiving
+    
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
-    res.json({ message: 'Employee deleted successfully' });
+
+    // Check if already archived
+    if (employee.isArchived) {
+      return res.status(400).json({ message: 'Employee is already archived' });
+    }
+
+    // Update employee to archived status
+    employee.isArchived = true;
+    employee.archivedAt = new Date();
+    employee.archivedBy = archivedBy || 'Unknown Admin';
+    employee.isActive = false; // Deactivate account to prevent login and attendance
+    
+    await employee.save();
+
+    console.log(`✅ Employee ${employee.firstName} ${employee.lastName} archived successfully`);
+    res.json({ 
+      success: true,
+      message: 'Employee archived successfully',
+      employee: {
+        _id: employee._id,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        isArchived: employee.isArchived,
+        archivedAt: employee.archivedAt
+      }
+    });
   } catch (err) {
+    console.error('❌ Error archiving employee:', err);
+    res.status(500).json({ message: 'Failed to archive employee', error: err.message });
+  }
+});
+
+// 🔓 UNARCHIVE an employee by ID (restore from archive)
+router.post('/:id/unarchive', async (req, res) => {
+  try {
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    // Check if not archived
+    if (!employee.isArchived) {
+      return res.status(400).json({ message: 'Employee is not archived' });
+    }
+
+    // Restore employee from archive
+    employee.isArchived = false;
+    employee.archivedAt = null;
+    employee.archivedBy = null;
+    employee.isActive = true; // Reactivate account
+    
+    await employee.save();
+
+    console.log(`✅ Employee ${employee.firstName} ${employee.lastName} unarchived successfully`);
+    res.json({ 
+      success: true,
+      message: 'Employee unarchived successfully',
+      employee: {
+        _id: employee._id,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        isArchived: employee.isArchived,
+        isActive: employee.isActive
+      }
+    });
+  } catch (err) {
+    console.error('❌ Error unarchiving employee:', err);
+    res.status(500).json({ message: 'Failed to unarchive employee', error: err.message });
+  }
+});
+
+// 📋 GET all archived employees
+router.get('/archived/list', async (req, res) => {
+  try {
+    const archivedEmployees = await Employee.find({ isArchived: true })
+      .select('firstName lastName email employeeId contactNumber status position hireDate isActive isArchived archivedAt archivedBy')
+      .sort({ archivedAt: -1 })
+      .lean()
+      .exec();
+
+    console.log(`✅ Retrieved ${archivedEmployees.length} archived employees`);
+    res.json({
+      success: true,
+      count: archivedEmployees.length,
+      employees: archivedEmployees
+    });
+  } catch (err) {
+    console.error('❌ Error fetching archived employees:', err);
+    res.status(500).json({ message: 'Failed to fetch archived employees', error: err.message });
+  }
+});
+
+// DELETE an employee by ID (DEPRECATED - Use archive instead)
+// ⚠️ This route is kept for backward compatibility but should not be used
+// Use POST /:id/archive instead for data transparency
+router.delete('/:id', async (req, res) => {
+  try {
+    // Instead of deleting, archive the employee
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    // Archive instead of delete
+    employee.isArchived = true;
+    employee.archivedAt = new Date();
+    employee.archivedBy = 'System (via delete endpoint)';
+    employee.isActive = false;
+    
+    await employee.save();
+
+    console.log(`⚠️ Employee archived via deprecated DELETE endpoint: ${employee.firstName} ${employee.lastName}`);
+    res.json({ message: 'Employee archived successfully (delete endpoint deprecated, use /archive)' });
+  } catch (err) {
+    console.error('❌ Error in delete endpoint:', err);
     res.status(500).json({ message: 'Failed to delete employee', error: err.message });
   }
 });

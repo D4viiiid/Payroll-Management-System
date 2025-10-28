@@ -83,6 +83,21 @@ const employeeSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  isArchived: {
+    // 🗄️ Archive flag for data transparency (soft delete)
+    type: Boolean,
+    default: false,
+  },
+  archivedAt: {
+    // 📅 Timestamp when employee was archived
+    type: Date,
+    default: null,
+  },
+  archivedBy: {
+    // 👤 Admin who archived the employee
+    type: String,
+    default: null,
+  },
   isAdmin: {
     // ✅ FIX ISSUE #1: Add isAdmin field for admin privileges
     type: Boolean,
@@ -151,6 +166,7 @@ employeeSchema.index({ email: 1 }); // Email lookups
 employeeSchema.index({ status: 1 }); // Employment status queries
 employeeSchema.index({ department: 1 }); // Department queries
 employeeSchema.index({ isAdmin: 1 }); // Admin user queries
+employeeSchema.index({ isArchived: 1 }); // Archive status queries
 employeeSchema.index({ createdAt: -1 }); // Sort by creation date
 
 // ===== COMPOUND INDEXES FOR LOGIN OPTIMIZATION =====
@@ -160,8 +176,8 @@ employeeSchema.index({ createdAt: -1 }); // Sort by creation date
 // 2. { employeeId: 1, isActive: 1 } - optimizes Employee.findOne({ employeeId, isActive: true })
 // MongoDB is smart enough to use these compound indexes for isActive-only queries too.
 // The warning can be safely ignored - these indexes improve login performance significantly.
-employeeSchema.index({ username: 1, isActive: 1 }); // Login query compound index
-employeeSchema.index({ employeeId: 1, isActive: 1 }); // Alternative login query compound index
+employeeSchema.index({ username: 1, isActive: 1, isArchived: 1 }); // Login query compound index
+employeeSchema.index({ employeeId: 1, isActive: 1, isArchived: 1 }); // Alternative login query compound index
 
 // 🔐 Hash password and adminPin before saving
 // ✅ CRITICAL PERFORMANCE FIX: Reduce bcrypt rounds from 12 to 10

@@ -55,6 +55,72 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+// ✅ Attendance Status Badge Component - SAME AS ADMIN (6 statuses)
+const AttendanceStatusBadge = ({ status }) => {
+  const getAttendanceStatusConfig = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'present':
+        return {
+          text: 'Present',
+          bgColor: 'bg-blue-100',
+          textColor: 'text-blue-800',
+          icon: '✓'
+        };
+      case 'half-day':
+        return {
+          text: 'Half-Day',
+          bgColor: 'bg-yellow-100',
+          textColor: 'text-yellow-800',
+          icon: '⚡'
+        };
+      case 'full-day':
+        return {
+          text: 'Full-Day',
+          bgColor: 'bg-green-100',
+          textColor: 'text-green-800',
+          icon: '✓✓'
+        };
+      case 'overtime':
+        return {
+          text: 'Overtime',
+          bgColor: 'bg-purple-100',
+          textColor: 'text-purple-800',
+          icon: '⏰'
+        };
+      case 'absent':
+        return {
+          text: 'Absent',
+          bgColor: 'bg-red-100',
+          textColor: 'text-red-800',
+          icon: '✗'
+        };
+      case 'invalid':
+        return {
+          text: 'Invalid',
+          bgColor: 'bg-gray-100',
+          textColor: 'text-gray-800',
+          icon: '⚠'
+        };
+      default:
+        return {
+          text: 'Unknown',
+          bgColor: 'bg-gray-100',
+          textColor: 'text-gray-600',
+          icon: '?'
+        };
+    }
+  };
+
+  const config = getAttendanceStatusConfig(status);
+
+  return (
+    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.textColor}`}>
+      <span className="mr-1">{config.icon}</span>
+      {config.text}
+    </span>
+  );
+};
+
 const EmployeeDashboard = () => {
   const [employee, setEmployee] = useState(null);
   const [attendance, setAttendance] = useState([]);
@@ -121,19 +187,52 @@ const EmployeeDashboard = () => {
       const timeOut = formatTime(record.timeOut);
 
       // Determine status: use dayType if available, otherwise use status field, default to 'present' if time in exists
+      // ✅ FIX: Map to the 6 allowed statuses: present, half-day, full-day, overtime, absent, invalid
       let displayStatus = 'unknown';
       
       if (record.dayType) {
         // Use dayType for more accurate status
-        displayStatus = record.dayType.toLowerCase().replace(' ', '-'); // 'Full Day' -> 'full-day', 'Half Day' -> 'half-day'
+        const dayType = record.dayType.toLowerCase().replace(' ', '-'); // 'Full Day' -> 'full-day'
+        
+        // Map dayType to one of the 6 statuses
+        if (dayType === 'full-day' || dayType === 'full day') {
+          displayStatus = 'full-day';
+        } else if (dayType === 'half-day' || dayType === 'half day') {
+          displayStatus = 'half-day';
+        } else if (dayType === 'overtime') {
+          displayStatus = 'overtime';
+        } else if (dayType === 'absent') {
+          displayStatus = 'absent';
+        } else if (dayType === 'invalid' || dayType === 'incomplete') {
+          displayStatus = 'invalid';
+        } else {
+          displayStatus = 'present';
+        }
       } else if (record.status) {
-        displayStatus = record.status.toLowerCase();
+        const status = record.status.toLowerCase();
+        
+        // Map status to one of the 6 statuses
+        if (status === 'full-day' || status === 'full day') {
+          displayStatus = 'full-day';
+        } else if (status === 'half-day' || status === 'half day' || status === 'late') {
+          displayStatus = 'half-day';
+        } else if (status === 'overtime') {
+          displayStatus = 'overtime';
+        } else if (status === 'absent') {
+          displayStatus = 'absent';
+        } else if (status === 'invalid' || status === 'incomplete') {
+          displayStatus = 'invalid';
+        } else if (status === 'present' || status === 'time in') {
+          displayStatus = 'present';
+        } else {
+          displayStatus = status;
+        }
       } else if (record.timeIn && record.timeOut) {
-        // If both time in and time out exist, assume present
+        // If both time in and time out exist, default to present (will be calculated by backend)
         displayStatus = 'present';
       } else if (record.timeIn && !record.timeOut) {
-        // If only time in exists, it's incomplete
-        displayStatus = 'incomplete';
+        // If only time in exists, it's present (currently working)
+        displayStatus = 'present';
       } else if (!record.timeIn) {
         // If no time in, it's absent
         displayStatus = 'absent';
@@ -1782,19 +1881,7 @@ const EmployeeDashboard = () => {
                                     {record.timeOut || '-'}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                      record.status === 'present' || record.status === 'full-day' ? 'bg-green-100 text-green-800' :
-                                      record.status === 'half-day' || record.status === 'late' ? 'bg-yellow-100 text-yellow-800' :
-                                      record.status === 'absent' ? 'bg-red-100 text-red-800' :
-                                      record.status === 'incomplete' ? 'bg-orange-100 text-orange-800' :
-                                      'bg-green-100 text-green-800'
-                                    }`}>
-                                      {record.status === 'present' || record.status === 'full-day' ? 'Present' :
-                                       record.status === 'half-day' || record.status === 'late' ? 'Half-day' :
-                                       record.status === 'absent' ? 'Absent' :
-                                       record.status === 'incomplete' ? 'Incomplete' :
-                                       'Present'}
-                                    </span>
+                                    <AttendanceStatusBadge status={record.status} />
                                   </td>
                                 </tr>
                               ))}

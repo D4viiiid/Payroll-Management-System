@@ -7,7 +7,7 @@ import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import SalaryRateModal from './SalaryRateModal'; // ✅ Import the existing modal
 import './Admin.responsive.css';
-import { showSuccess, showError, showConfirm } from '../utils/toast';
+import { showSuccess, showError, showConfirm, showWarning } from '../utils/toast';
 
 // ✅ FIXED: Status Badge Component - Now handles both "Full Day" and "Full-day" formats
 // Uses inline conditional classes instead of dynamic class strings for Tailwind compatibility
@@ -635,22 +635,42 @@ const Salary = () => {
         const attDate = getDateOnly(att.date);
         const match = att.employeeId === newSalaryData.employeeId && attDate === attendanceDateOnly;
         if (att.employeeId === newSalaryData.employeeId) {
-          console.log(`🔎 Checking attendance: employeeId=${att.employeeId}, date=${attDate}, match=${match}`);
+          console.log(`🔎 Checking attendance: employeeId=${att.employeeId}, date=${attDate}, dayType=${att.dayType}, hasTimeOut=${!!att.timeOut}, match=${match}`);
         }
         return match;
       });
 
       let salaryAmount = 0;
-      let status = 'N/A';
+      let statusDisplay = 'N/A';
       
       if (matchingAttendance) {
+        // ✅ CRITICAL FIX: Check if attendance is complete (has timeOut) and has valid dayType
+        const validDayTypes = ['Half Day', 'Full Day', 'Overtime'];
+        
+        if (!matchingAttendance.timeOut) {
+          console.warn(`⚠️ Attendance found but no timeOut - employee still clocked in`);
+          showWarning('Employee has clocked in but not out yet. Please wait until they clock out.');
+          setLoading(false);
+          return;
+        }
+        
+        if (!validDayTypes.includes(matchingAttendance.dayType)) {
+          console.warn(`⚠️ Attendance found but invalid dayType: ${matchingAttendance.dayType}`);
+          showWarning(`Attendance record has invalid day type: ${matchingAttendance.dayType}. No salary calculated.`);
+          setLoading(false);
+          return;
+        }
+        
         // Use attendance data for salary amount and status
         salaryAmount = matchingAttendance.totalPay || matchingAttendance.daySalary || 0;
-        status = matchingAttendance.status || 'N/A';
-        console.log(`📊 Found matching attendance: ${status}, Amount: ₱${salaryAmount}`);
+        statusDisplay = matchingAttendance.dayType || matchingAttendance.status || 'N/A'; // Use dayType for display
+        console.log(`📊 Found valid attendance: dayType=${matchingAttendance.dayType}, status=${matchingAttendance.status}, Amount: ₱${salaryAmount}`);
       } else {
         console.warn(`⚠️ No attendance record found for ${newSalaryData.employeeId} on ${attendanceDateOnly}`);
         console.warn(`📊 All attendance dates for this employee:`, attendanceRecords.filter(att => att.employeeId === newSalaryData.employeeId).map(att => getDateOnly(att.date)));
+        showError(`No completed attendance record found for this employee on ${attendanceDateOnly}. Employee must clock in and out first.`);
+        setLoading(false);
+        return;
       }
 
       // Create salary record with data from attendance
@@ -658,7 +678,7 @@ const Salary = () => {
         employeeId: newSalaryData.employeeId,
         name: `${employee.firstName} ${employee.lastName}`,
         salary: salaryAmount,
-        status: status,
+        status: statusDisplay, // Use dayType-based status
         date: newSalaryData.date,
         archived: false
       };
@@ -667,9 +687,7 @@ const Salary = () => {
       const result = await salaryApi.create(salaryData);
       
       if (!result.error) {
-        showSuccess(matchingAttendance 
-          ? `Salary record created successfully with ${status} status and ₱${salaryAmount.toFixed(2)}!`
-          : 'Salary record created successfully (no matching attendance found)!');
+        showSuccess(`Salary record created successfully with ${statusDisplay} status and ${formatPeso(salaryAmount)}!`);
         setShowAddForm(false);
         await fetchSalaries(); // Refresh list
         setNewSalaryData({ employeeId: '', salary: '', date: '' }); // Reset form
@@ -718,16 +736,28 @@ const Salary = () => {
       
       // Loop through attendance records and create missing salary records
       for (const attendance of attendanceRecords) {
-        // ✅ FIX: Only process completed attendance with status that has salary computation
-        const validStatuses = ['Half Day', 'Full Day', 'Overtime', 'Half-day', 'Full-day']; // Case variations
-        if (!attendance.timeOut || !validStatuses.includes(attendance.status)) {
-          console.log(`⏭️ Skipping attendance: employeeId=${attendance.employeeId}, status=${attendance.status}, hasTimeOut=${!!attendance.timeOut}`);
+        // ✅ CRITICAL FIX: Check dayType field (not status field) for salary eligibility
+        // Valid dayType values from AttendanceModels.js: 'Half Day', 'Full Day', 'Overtime'
+        // status field uses: 'half-day', 'full-day', 'overtime', 'present', 'invalid', 'absent'
+        // We need to use dayType to match what backend calculates!
+        const validDayTypes = ['Half Day', 'Full Day', 'Overtime'];
+        
+        // MUST have timeOut to be a completed day (not still clocked in)
+        if (!attendance.timeOut) {
+          console.log(`⏭️ Skipping - no timeOut: employeeId=${attendance.employeeId}, dayType=${attendance.dayType}`);
+          skippedCount++;
+          continue;
+        }
+        
+        // MUST have valid dayType for salary calculation
+        if (!validDayTypes.includes(attendance.dayType)) {
+          console.log(`⏭️ Skipping - invalid dayType: employeeId=${attendance.employeeId}, dayType=${attendance.dayType}, status=${attendance.status}`);
           skippedCount++;
           continue;
         }
 
         const attendanceDate = getDateOnly(attendance.date);
-        console.log(`✅ Valid attendance found: employeeId=${attendance.employeeId}, status=${attendance.status}, date=${attendanceDate}`);
+        console.log(`✅ Valid attendance found: employeeId=${attendance.employeeId}, dayType=${attendance.dayType}, status=${attendance.status}, date=${attendanceDate}`);
         
         // Check if salary record exists
         const existingSalary = currentSalaries.find(salary => 

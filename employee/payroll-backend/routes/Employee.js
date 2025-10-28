@@ -409,24 +409,10 @@ router.post('/:id/archive', async (req, res) => {
     console.log(`📁 Archive request received for employee ID: ${req.params.id}`);
     const { archivedBy } = req.body; // Admin username/ID who is archiving
     
-    // ✅ FIX: Use findByIdAndUpdate instead of save() to avoid validation issues
-    const employee = await Employee.findByIdAndUpdate(
-      req.params.id,
-      {
-        $set: {
-          isArchived: true,
-          archivedAt: new Date(),
-          archivedBy: archivedBy || 'Unknown Admin',
-          isActive: false // Deactivate account to prevent login and attendance
-        }
-      },
-      { 
-        new: true, // Return updated document
-        runValidators: false // Skip validation for archive operation
-      }
-    );
-
-    if (!employee) {
+    // ✅ CRITICAL FIX: Check if employee exists first
+    const existingEmployee = await Employee.findById(req.params.id);
+    
+    if (!existingEmployee) {
       console.log(`❌ Employee not found: ${req.params.id}`);
       return res.status(404).json({ 
         success: false,
@@ -435,7 +421,7 @@ router.post('/:id/archive', async (req, res) => {
     }
 
     // Check if already archived
-    if (employee.isArchived && !employee.archivedAt) {
+    if (existingEmployee.isArchived) {
       console.log(`⚠️ Employee already archived: ${req.params.id}`);
       return res.status(400).json({ 
         success: false,
@@ -443,25 +429,55 @@ router.post('/:id/archive', async (req, res) => {
       });
     }
 
-    console.log(`✅ Employee ${employee.firstName} ${employee.lastName} archived successfully`);
+    // ✅ CRITICAL FIX: Use updateOne to bypass ALL Mongoose middleware (including pre-save hooks)
+    // This completely avoids the password hashing and any other save hooks
+    const updateResult = await Employee.updateOne(
+      { _id: req.params.id },
+      {
+        $set: {
+          isArchived: true,
+          archivedAt: new Date(),
+          archivedBy: archivedBy || 'Unknown Admin',
+          isActive: false // Deactivate account to prevent login and attendance
+        }
+      }
+    );
+
+    console.log(`📊 Update result: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`);
+
+    if (updateResult.matchedCount === 0) {
+      console.log(`❌ Employee not found during update: ${req.params.id}`);
+      return res.status(404).json({ 
+        success: false,
+        message: 'Employee not found during update' 
+      });
+    }
+
+    // Fetch the updated employee to return in response
+    const updatedEmployee = await Employee.findById(req.params.id);
+
+    console.log(`✅ Employee ${updatedEmployee.firstName} ${updatedEmployee.lastName} archived successfully`);
     res.json({ 
       success: true,
       message: 'Employee archived successfully',
       employee: {
-        _id: employee._id,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        isArchived: employee.isArchived,
-        archivedAt: employee.archivedAt
+        _id: updatedEmployee._id,
+        firstName: updatedEmployee.firstName,
+        lastName: updatedEmployee.lastName,
+        isArchived: updatedEmployee.isArchived,
+        archivedAt: updatedEmployee.archivedAt
       }
     });
   } catch (err) {
     console.error('❌ Error archiving employee:', err);
+    console.error('❌ Error name:', err.name);
+    console.error('❌ Error message:', err.message);
     console.error('❌ Error stack:', err.stack);
     res.status(500).json({ 
       success: false,
       message: 'Failed to archive employee', 
       error: err.message,
+      errorName: err.name,
       details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
